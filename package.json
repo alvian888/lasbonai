@@ -1,0 +1,59 @@
+{
+  "name": "okx-agentic-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "cli": "tsx src/cli.ts",
+    "scan:bnb-cheap-quality": "tsx src/scan-cheap-quality-bnb.ts",
+    "export:candidates": "tsx src/export-candidates.ts",
+    "live:preflight": "tsx src/live-preflight.ts",
+    "compute:apply": "bash ./scripts/compute-profile-apply.sh",
+    "compute:status": "bash ./scripts/compute-profile-status.sh",
+    "integrate:local-agent": "bash ./scripts/integrate-local-agent.sh",
+    "health:local-agent": "bash ./scripts/health-local-agent.sh",
+    "validate:full": "bash ./scripts/validate-full-stack.sh",
+    "validate:quick": "bash ./scripts/validate-full-stack.sh --quick",
+    "validate:strict": "bash ./scripts/validate-full-stack.sh --strict",
+    "autostart:integrated": "bash ./scripts/autostart-integrated.sh",
+    "cloudflare:tunnel:start": "bash ./scripts/cloudflare-tunnel-safe-start.sh",
+    "cloudflare:tunnel:status": "bash ./scripts/cloudflare-tunnel-status.sh",
+    "telegram:updates": "tsx src/telegram-tools.ts get-updates",
+    "telegram:test": "tsx src/telegram-tools.ts send-test",
+    "xpmarket:state:check": "tsx src/check-xpmarket-snap-state.ts",
+    "xpmarket:state:export": "tsx src/export-xpmarket-snap-activity.ts",
+    "xpmarket:wallet:check": "tsx src/check-xpmarket-wallet-tokens.ts",
+    "xpmarket:connect": "HEADLESS=0 tsx src/connect-xpmarket-wallet.ts --keep-open",
+    "xpmarket:reconnect": "HEADLESS=0 tsx src/xpmarket-logout-reconnect.ts",
+    "xpmarket:trustline:top10": "HEADLESS=0 tsx src/xpmarket-trustline-top10.ts",
+    "xpmarket:snap:xrpl": "tsx src/setup-xrpl-snap.ts --snap-id npm:xrpl-snap --snap-version 1.0.3 --password intelijen",
+    "bsc:monitor": "tsx src/bsc-monitor.ts",
+    "bsc:monitor:once": "tsx src/bsc-monitor.ts --once",
+    "bsc:monitor:fast": "tsx src/bsc-monitor.ts --interval 30",
+    "bsc:monitor:silent": "tsx src/bsc-monitor.ts --no-telegram",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "bip39": "^3.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mysql2": "^3.22.0",
+    "openai": "^4.86.2",
+    "puppeteer": "^24.40.0",
+    "viem": "^2.23.2",
+    "xrpl": "^4.6.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}

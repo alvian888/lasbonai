@@ -1,0 +1,52 @@
+{
+  "symbol": "WBNB",
+  "name": "Wrapped BNB",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+  "decimals": 18,
+  "category": "hold",
+  "timestamp": "2026-04-18T12:59:54.040Z",
+  "timestampUnix": 1776517190301,
+  "price": {
+    "usd": 634.236833876872,
+    "idr": 10655178.80913145
+  },
+  "change": {
+    "1h": 0.1,
+    "4h": -0.46,
+    "24h": -0.11
+  },
+  "range24h": {
+    "high": 661.6181984252797,
+    "low": 617.4245785752163
+  },
+  "market": {
+    "volume24h_usd": 1028411028.3102294,
+    "volume24h_idr": 17277305275611.854,
+    "liquidity_usd": 1296391755.6631234,
+    "liquidity_idr": 21779381495140.473,
+    "txs24h": 2526331
+  },
+  "portfolio": {
+    "holdings": 0.003994171739589813,
+    "entryPrice": 621.9,
+    "entryCost_usd": 0.88,
+    "entryCost_idr": 14784,
+    "currentValue_usd": 2.533250838077921,
+    "currentValue_idr": 42558.61407970908,
+    "pnl_usd": 1.6532508380779212,
+    "pnl_idr": 27774.614079709074,
+    "pnl_pct": 1.98
+  },
+  "zones": {
+    "buyZone": 590,
+    "sellTarget1": 640.87,
+    "sellTarget2": 665.75,
+    "sellTarget3": 696.86,
+    "stopLoss": 591.09,
+    "trailingStop": 623.5744811309438,
+    "trailingStopPct": 4
+  },
+  "signal": "HOLD"
+}

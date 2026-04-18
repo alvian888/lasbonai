@@ -1,0 +1,52 @@
+{
+  "symbol": "LAWAS",
+  "name": "LAWAS",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0xc6e6b78a08613768572255bc859204542346b879",
+  "decimals": 18,
+  "category": "moonshot",
+  "timestamp": "2026-04-18T12:56:53.835Z",
+  "timestampUnix": 1776517008551,
+  "price": {
+    "usd": 0.000028975391285477492,
+    "idr": 0.48678657359602184
+  },
+  "change": {
+    "1h": 0,
+    "4h": -1.34,
+    "24h": -0.24
+  },
+  "range24h": {
+    "high": 0.000029999230139501852,
+    "low": 0.000028975391285477492
+  },
+  "market": {
+    "volume24h_usd": 27.91887422382916,
+    "volume24h_idr": 469037.0869603299,
+    "liquidity_usd": 5885.205066036623,
+    "liquidity_idr": 98871445.10941526,
+    "txs24h": 55
+  },
+  "portfolio": {
+    "holdings": 193686.22,
+    "entryPrice": 0.00002815,
+    "entryCost_usd": 5.45,
+    "entryCost_idr": 91560,
+    "currentValue_usd": 5.612134011105076,
+    "currentValue_idr": 94283.85138656528,
+    "pnl_usd": 0.16213401110507597,
+    "pnl_idr": 2723.8513865652762,
+    "pnl_pct": 2.93
+  },
+  "zones": {
+    "buyZone": 0.00002731,
+    "sellTarget1": 0.00003237,
+    "sellTarget2": 0.0000366,
+    "sellTarget3": 0.00004223,
+    "stopLoss": 0.00002674,
+    "trailingStop": 0.00002849926863252676,
+    "trailingStopPct": 8
+  },
+  "signal": "HOLD"
+}

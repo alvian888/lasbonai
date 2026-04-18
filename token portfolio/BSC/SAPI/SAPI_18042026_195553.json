@@ -1,0 +1,52 @@
+{
+  "symbol": "SAPI",
+  "name": "SAPI",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x1ae102c0c30d604e7089fb210dd4b42c01287f32",
+  "decimals": 18,
+  "category": "moonshot",
+  "timestamp": "2026-04-18T12:55:53.923Z",
+  "timestampUnix": 1776516948994,
+  "price": {
+    "usd": 0.004897675534685458,
+    "idr": 82.2809489827157
+  },
+  "change": {
+    "1h": -0.08,
+    "4h": -1.04,
+    "24h": 0.1
+  },
+  "range24h": {
+    "high": 0.005121562401391127,
+    "low": 0.004836437656360884
+  },
+  "market": {
+    "volume24h_usd": 63.30580861249789,
+    "volume24h_idr": 1063537.5846899645,
+    "liquidity_usd": 1676.943937417014,
+    "liquidity_idr": 28172658.148605835,
+    "txs24h": 68
+  },
+  "portfolio": {
+    "holdings": 1408.229621871266,
+    "entryPrice": 0.004687,
+    "entryCost_usd": 6.05,
+    "entryCost_idr": 101640,
+    "currentValue_usd": 6.897051766258254,
+    "currentValue_idr": 115870.46967313866,
+    "pnl_usd": 0.8470517662582537,
+    "pnl_idr": 14230.469673138663,
+    "pnl_pct": 4.49
+  },
+  "zones": {
+    "buyZone": 0.004546,
+    "sellTarget1": 0.00539,
+    "sellTarget2": 0.006093,
+    "sellTarget3": 0.007031,
+    "stopLoss": 0.004453,
+    "trailingStop": 0.004766364302135549,
+    "trailingStopPct": 8
+  },
+  "signal": "HOLD"
+}

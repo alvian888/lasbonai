@@ -1,0 +1,52 @@
+{
+  "symbol": "LINK",
+  "name": "Chainlink",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0xF8A0BF9cF54Bb92F17374d9e9A321E6a111a51bD",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-18T12:58:53.808Z",
+  "timestampUnix": 1776517132629,
+  "price": {
+    "usd": 9.3792886294372,
+    "idr": 157572.04897454497
+  },
+  "change": {
+    "1h": -0.31,
+    "4h": -0.97,
+    "24h": -2.12
+  },
+  "range24h": {
+    "high": 9.868127831550012,
+    "low": 9.348293370742143
+  },
+  "market": {
+    "volume24h_usd": 272571.22976628673,
+    "volume24h_idr": 4579196660.073617,
+    "liquidity_usd": 1839341.1691253267,
+    "liquidity_idr": 30900931641.30549,
+    "txs24h": 2316
+  },
+  "portfolio": {
+    "holdings": 3.898811135e-9,
+    "entryPrice": 9.585,
+    "entryCost_usd": 0,
+    "entryCost_idr": 0,
+    "currentValue_usd": 3.6568074946828646e-8,
+    "currentValue_idr": 0.0006143436591067213,
+    "pnl_usd": 3.6568074946828646e-8,
+    "pnl_idr": 0.0006143436591067213,
+    "pnl_pct": -2.15
+  },
+  "zones": {
+    "buyZone": 9.202,
+    "sellTarget1": 10.544,
+    "sellTarget2": 11.502,
+    "sellTarget3": 12.461,
+    "stopLoss": 9.106,
+    "trailingStop": 9.473402718288012,
+    "trailingStopPct": 6
+  },
+  "signal": "TRAILING_STOP"
+}

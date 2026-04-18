@@ -1,0 +1,52 @@
+{
+  "symbol": "XPL",
+  "name": "Plasma",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x405fbc9004d857903bfd6b3357792d71a50726b0",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-18T12:55:53.923Z",
+  "timestampUnix": 1776516948158,
+  "price": {
+    "usd": 0.1204718079906958,
+    "idr": 2023.9263742436895
+  },
+  "change": {
+    "1h": -0.1,
+    "4h": -3.98,
+    "24h": -11.76
+  },
+  "range24h": {
+    "high": 0.13766767773051722,
+    "low": 0.119601863378759
+  },
+  "market": {
+    "volume24h_usd": 1035262.4179471484,
+    "volume24h_idr": 17392408621.512093,
+    "liquidity_usd": 622903.4322342628,
+    "liquidity_idr": 10464777661.535616,
+    "txs24h": 14653
+  },
+  "portfolio": {
+    "holdings": 1.76602314e-9,
+    "entryPrice": 0.13133,
+    "entryCost_usd": 0,
+    "entryCost_idr": 0,
+    "currentValue_usd": 2.127560006292057e-10,
+    "currentValue_idr": 0.000003574300810570656,
+    "pnl_usd": 2.127560006292057e-10,
+    "pnl_idr": 0.000003574300810570656,
+    "pnl_pct": -8.27
+  },
+  "zones": {
+    "buyZone": 0.12608,
+    "sellTarget1": 0.14446,
+    "sellTarget2": 0.1576,
+    "sellTarget3": 0.17073,
+    "stopLoss": 0.12476,
+    "trailingStop": 0.13715870329249086,
+    "trailingStopPct": 6
+  },
+  "signal": "STOP_LOSS"
+}

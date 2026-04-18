@@ -1,0 +1,52 @@
+{
+  "symbol": "BNB",
+  "name": "BNB Native",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "native",
+  "decimals": 18,
+  "category": "hold",
+  "timestamp": "2026-04-18T12:58:53.807Z",
+  "timestampUnix": 1776517129806,
+  "price": {
+    "usd": 634.0438553255384,
+    "idr": 10651936.769469045
+  },
+  "change": {
+    "1h": 0.03,
+    "4h": -0.5,
+    "24h": -0.25
+  },
+  "range24h": {
+    "high": 661.6181984252797,
+    "low": 617.4245785752163
+  },
+  "market": {
+    "volume24h_usd": 1028612868.8115311,
+    "volume24h_idr": 17280696196033.723,
+    "liquidity_usd": 1296394316.1232939,
+    "liquidity_idr": 21779424510871.336,
+    "txs24h": 2525724
+  },
+  "portfolio": {
+    "holdings": 0.005740863949427798,
+    "entryPrice": 622.8,
+    "entryCost_usd": 5.68,
+    "entryCost_idr": 95424,
+    "currentValue_usd": 3.639959511394598,
+    "currentValue_idr": 61151.31979142925,
+    "pnl_usd": -2.0400404886054018,
+    "pnl_idr": -34272.68020857075,
+    "pnl_pct": 1.81
+  },
+  "zones": {
+    "buyZone": 590,
+    "sellTarget1": 640.87,
+    "sellTarget2": 665.75,
+    "sellTarget3": 696.86,
+    "stopLoss": 591.09,
+    "trailingStop": 623.8261437452235,
+    "trailingStopPct": 4
+  },
+  "signal": "HOLD"
+}

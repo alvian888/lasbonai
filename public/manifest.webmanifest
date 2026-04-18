@@ -1,0 +1,9 @@
+{
+  "name": "OKX Agentic Bot",
+  "short_name": "OKX Bot",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1a2b",
+  "theme_color": "#0c1a2b",
+  "icons": []
+}
