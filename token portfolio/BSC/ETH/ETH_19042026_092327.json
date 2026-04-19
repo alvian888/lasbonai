@@ -1,0 +1,52 @@
+{
+  "symbol": "ETH",
+  "name": "Binance-Peg Ethereum",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+  "decimals": 18,
+  "category": "hold",
+  "timestamp": "2026-04-19T02:23:27.031Z",
+  "timestampUnix": 1776565403663,
+  "price": {
+    "usd": 2346.874808686689,
+    "idr": 39427496.78593638
+  },
+  "change": {
+    "1h": 0,
+    "4h": -0.26,
+    "24h": -3.21
+  },
+  "range24h": {
+    "high": 2453.784304082282,
+    "low": 2308.491386676092
+  },
+  "market": {
+    "volume24h_usd": 27933024.93268228,
+    "volume24h_idr": 469274818869.0623,
+    "liquidity_usd": 55455644.8636803,
+    "liquidity_idr": 931654833709.8291,
+    "txs24h": 101363
+  },
+  "portfolio": {
+    "holdings": 0.0000138,
+    "entryPrice": 2420.36,
+    "entryCost_usd": 0.03,
+    "entryCost_idr": 504,
+    "currentValue_usd": 0.032386872359876306,
+    "currentValue_idr": 544.0994556459219,
+    "pnl_usd": 0.0023868723598763075,
+    "pnl_idr": 40.099455645921964,
+    "pnl_pct": -3.04
+  },
+  "zones": {
+    "buyZone": 2299.34,
+    "sellTarget1": 2783.41,
+    "sellTarget2": 3025.45,
+    "sellTarget3": 3388.5,
+    "stopLoss": 2226.73,
+    "trailingStop": 2275.1384,
+    "trailingStopPct": 6
+  },
+  "signal": "HOLD"
+}

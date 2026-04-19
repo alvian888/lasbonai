@@ -21,7 +21,12 @@ const requestSchema = z.object({
   buyAmount: z.string(),
   sellAmount: z.string(),
   slippage: z.string().optional(),
-  marketContext: z.string().optional()
+  marketContext: z.string().optional(),
+  rsi: z.number().optional(),
+  macd: z.number().optional(),
+  macdSignal: z.number().optional(),
+  emaFast: z.number().optional(),
+  emaSlow: z.number().optional()
 });
 
 app.use(express.json());

@@ -1,0 +1,52 @@
+{
+  "symbol": "ADA",
+  "name": "Binance-Peg Cardano",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x3ee2200efb3400fabb9aacf31297cbdd1d435d47",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-19T02:25:27.224Z",
+  "timestampUnix": 1776565520860,
+  "price": {
+    "usd": 0.24711958094151543,
+    "idr": 4151.608959817459
+  },
+  "change": {
+    "1h": -0.7,
+    "4h": -0.94,
+    "24h": -4.36
+  },
+  "range24h": {
+    "high": 0.26107662442722646,
+    "low": 0.23215202607809587
+  },
+  "market": {
+    "volume24h_usd": 623760.3089962666,
+    "volume24h_idr": 10479173191.137278,
+    "liquidity_usd": 1986156.1005569866,
+    "liquidity_idr": 33367422489.357376,
+    "txs24h": 3356
+  },
+  "portfolio": {
+    "holdings": 3.922,
+    "entryPrice": 0.2547,
+    "entryCost_usd": 1,
+    "entryCost_idr": 16800,
+    "currentValue_usd": 0.9692029964526235,
+    "currentValue_idr": 16282.610340404075,
+    "pnl_usd": -0.030797003547376467,
+    "pnl_idr": -517.3896595959246,
+    "pnl_pct": -2.98
+  },
+  "zones": {
+    "buyZone": 0.242,
+    "sellTarget1": 0.2929,
+    "sellTarget2": 0.3184,
+    "sellTarget3": 0.3566,
+    "stopLoss": 0.2343,
+    "trailingStop": 0.23941799999999996,
+    "trailingStopPct": 6
+  },
+  "signal": "HOLD"
+}

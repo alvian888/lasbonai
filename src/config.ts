@@ -105,7 +105,21 @@ const envSchema = z.object({
   TAKE_PROFIT_PCT: z.coerce.number().default(10),
   STOP_LOSS_PCT: z.coerce.number().default(15),
   COOLDOWN_SAME_DIRECTION_MIN: z.coerce.number().default(15),
-  SELL_PORTION_PCT: z.coerce.number().default(50)
+  SELL_PORTION_PCT: z.coerce.number().default(50),
+
+  // Sentiment analysis
+  SENTIMENT_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === "true")
+    .default("false"),
+  SENTIMENT_CHANNEL_URL: z.string().optional().default("https://t.me/kaptencrypto707"),
+  SENTIMENT_CHANNEL_URLS: z.string().optional().default(""),
+  SENTIMENT_THRESHOLD: z.coerce.number().default(70),
+  SENTIMENT_SCRAPE_LIMIT: z.coerce.number().default(50),
+
+  // Google OAuth – MCP default gateway client ID
+  GOOGLE_CLIENT_ID: z.string().default("204421016317-9fnkralojtes0u7lv0skua2spnm9j3u8.apps.googleusercontent.com")
 });
 
 export const config = envSchema.parse(process.env);

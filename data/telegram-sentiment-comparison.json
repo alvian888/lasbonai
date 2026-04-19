@@ -1,0 +1,83 @@
+{
+  "comparedAt": "2026-04-19T02:28:14.235Z",
+  "channels": [
+    {
+      "channel": "kaptencrypto707",
+      "channelUrl": "https://t.me/kaptencrypto707",
+      "messageCount": 20,
+      "scrapedAt": "2026-04-19T02:28:09.476Z",
+      "sentimentScore": 85,
+      "overallSentiment": "positive",
+      "mentionedTokens": [
+        {
+          "symbol": "BTC",
+          "sentiment": "positive",
+          "confidence": 0.9
+        },
+        {
+          "symbol": "ETH",
+          "sentiment": "neutral",
+          "confidence": 0.5
+        }
+      ],
+      "topBullishSignals": [
+        "Analyst's prediction of Bitcoin breaking through $80k",
+        "Many users expressing optimism about the market"
+      ],
+      "topBearishSignals": [],
+      "reasoning": "Strong bullish sentiment and price predictions from analysts, with many expecting Bitcoin to break through resistance levels."
+    },
+    {
+      "channel": "cryptoanalyst_ff",
+      "channelUrl": "https://t.me/cryptoanalyst_ff",
+      "messageCount": 20,
+      "scrapedAt": "2026-04-19T02:28:09.404Z",
+      "sentimentScore": 42,
+      "overallSentiment": "neutral",
+      "mentionedTokens": [
+        {
+          "symbol": "BTC",
+          "sentiment": "positive",
+          "confidence": 0.8
+        },
+        {
+          "symbol": "ETH",
+          "sentiment": "neutral",
+          "confidence": 1
+        },
+        {
+          "symbol": "LINK",
+          "sentiment": "neutral",
+          "confidence": 1
+        },
+        {
+          "symbol": "KIN",
+          "sentiment": "neutral",
+          "confidence": 1
+        },
+        {
+          "symbol": "BSB",
+          "sentiment": "neutral",
+          "confidence": 1
+        }
+      ],
+      "topBullishSignals": [
+        "#dot buy",
+        "#KIN Long dari harga sekrng 0.02989 atau di bawahnya Tp 0.03344 SL 0.02802 Dyor",
+        "#BSB Long di harga sekarang 0.1181 atau di bawahnya TP di 0.1293 SL di 0.1119 #Dyor"
+      ],
+      "topBearishSignals": [
+        "Penurunan bear market rata rata 75%-80% ini baru 47%. Berrti ada sekitar 32% lg penurunan."
+      ],
+      "reasoning": "Mixed sentiment with some long positions and bullish mentions, but also bearish comments about Bitcoin."
+    }
+  ],
+  "combinedScore": 64,
+  "combinedSentiment": "neutral",
+  "agreement": "weak",
+  "commonBullishTokens": [
+    "BTC"
+  ],
+  "commonBearishTokens": [],
+  "tradeDecision": "Hold: combined score 64% below threshold"
+}

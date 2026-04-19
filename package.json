@@ -24,6 +24,8 @@
     "cloudflare:tunnel:status": "bash ./scripts/cloudflare-tunnel-status.sh",
     "telegram:updates": "tsx src/telegram-tools.ts get-updates",
     "telegram:test": "tsx src/telegram-tools.ts send-test",
+    "telegram:scrape": "tsx src/telegram-scraper.ts",
+    "sentiment:test": "tsx src/sentiment-trader.ts",
     "xpmarket:state:check": "tsx src/check-xpmarket-snap-state.ts",
     "xpmarket:state:export": "tsx src/export-xpmarket-snap-activity.ts",
     "xpmarket:wallet:check": "tsx src/check-xpmarket-wallet-tokens.ts",

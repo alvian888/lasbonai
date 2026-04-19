@@ -1,0 +1,52 @@
+{
+  "symbol": "IDRX",
+  "name": "IDRX",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x649a2da7b28e0d54c13d5eff95d3a660652742cc",
+  "decimals": 0,
+  "category": "stablecoin",
+  "timestamp": "2026-04-18T18:40:04.204Z",
+  "timestampUnix": 1776537601311,
+  "price": {
+    "usd": 0.00005823079846944211,
+    "idr": 0.9782774142866275
+  },
+  "change": {
+    "1h": 0,
+    "4h": 0,
+    "24h": -0.18
+  },
+  "range24h": {
+    "high": 0.000058525822488579576,
+    "low": 0.00005773228544599217
+  },
+  "market": {
+    "volume24h_usd": 475.82811889592205,
+    "volume24h_idr": 7993912.39745149,
+    "liquidity_usd": 20473.871510797304,
+    "liquidity_idr": 343961041.3813947,
+    "txs24h": 22
+  },
+  "portfolio": {
+    "holdings": 26500,
+    "entryPrice": 0.0000582,
+    "entryCost_usd": 10.83,
+    "entryCost_idr": 181944,
+    "currentValue_usd": 1.5431161594402159,
+    "currentValue_idr": 25924.351478595625,
+    "pnl_usd": -9.286883840559785,
+    "pnl_idr": -156019.6485214044,
+    "pnl_pct": 0.05
+  },
+  "zones": {
+    "buyZone": 0.000055,
+    "sellTarget1": 0.000065,
+    "sellTarget2": 0.000065,
+    "sellTarget3": 0.000065,
+    "stopLoss": 0.00005,
+    "trailingStop": 0.0000582,
+    "trailingStopPct": 0
+  },
+  "signal": "STABLE"
+}

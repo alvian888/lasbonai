@@ -30,7 +30,12 @@ async function main() {
     buyAmount: config.DEFAULT_BUY_AMOUNT,
     sellAmount: config.DEFAULT_SELL_AMOUNT,
     slippage: config.DEFAULT_SLIPPAGE,
-    marketContext: getArgValue("--market-context")
+    marketContext: getArgValue("--market-context"),
+    rsi: getArgValue("--rsi") ? Number(getArgValue("--rsi")) : undefined,
+    macd: getArgValue("--macd") ? Number(getArgValue("--macd")) : undefined,
+    macdSignal: getArgValue("--macd-signal") ? Number(getArgValue("--macd-signal")) : undefined,
+    emaFast: getArgValue("--ema-fast") ? Number(getArgValue("--ema-fast")) : undefined,
+    emaSlow: getArgValue("--ema-slow") ? Number(getArgValue("--ema-slow")) : undefined
   });
 
   console.log(JSON.stringify(result, jsonReplacer, 2));

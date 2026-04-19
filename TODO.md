@@ -1,0 +1,14 @@
+- [x] Add detailed stage-duration logs in `src/scheduler.ts`
+- [x] Add fetch timeout helpers in `src/candidate-scan.ts`
+- [x] Add bounded concurrency for CoinGecko enrichment in `src/candidate-scan.ts`
+- [x] Add additional scan progress logs in `src/candidate-scan.ts`
+- [x] Run TypeScript build check
+- [x] Update TODO completion status
+
+- [x] Baseline strategy fix (real TA) scope
+- [x] Add TA fields to `TradingRequest` in `src/types.ts` (rsi, macd, macdSignal, emaFast, emaSlow)
+- [x] Wire TA fields in `src/server.ts` request schema
+- [x] Wire TA fields in `src/cli.ts` optional args
+- [x] Update `src/baseline-strategy.ts` to consume TA fields (no keyword-based directional inference)
+- [x] Run TypeScript build check
+- [x] Mark TODO items completed

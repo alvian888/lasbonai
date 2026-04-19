@@ -66,6 +66,9 @@ interface DexScreenerResponse {
   pairs?: DexScreenerPair[];
 }
 
+const FETCH_TIMEOUT_MS = 10_000;
+const COINGECKO_CONCURRENCY = 4;
+
 function asNumber(value: string | number | null | undefined) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
@@ -79,36 +82,40 @@ async function delay(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<T | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json().catch(() => null)) as T | null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchUsdToIdrRate() {
   if (config.CANDIDATE_FX_USD_TO_IDR > 0) {
     return config.CANDIDATE_FX_USD_TO_IDR;
   }
 
-  try {
-    const response = await fetch("https://open.er-api.com/v6/latest/USD");
-    const payload = (await response.json().catch(() => null)) as { rates?: { IDR?: number } } | null;
-    const rate = payload?.rates?.IDR;
-    if (rate && Number.isFinite(rate)) {
-      return rate;
-    }
-  } catch {
-    // ignore and use fallback below
+  const payload = await fetchJsonWithTimeout<{ rates?: { IDR?: number } }>("https://open.er-api.com/v6/latest/USD");
+  const rate = payload?.rates?.IDR;
+  if (rate && Number.isFinite(rate)) {
+    return rate;
   }
 
   return 17000;
 }
 
 async function fetchCoinGeckoContract(address: string): Promise<CoinGeckoContractResponse | null> {
-  try {
-    const response = await fetch(`https://api.coingecko.com/api/v3/coins/binance-smart-chain/contract/${address}`);
-    if (!response.ok) {
-      return null;
-    }
-
-    return (await response.json().catch(() => null)) as CoinGeckoContractResponse | null;
-  } catch {
-    return null;
-  }
+  return fetchJsonWithTimeout<CoinGeckoContractResponse>(
+    `https://api.coingecko.com/api/v3/coins/binance-smart-chain/contract/${address}`
+  );
 }
 
 async function fetchAllowlistDexCandidates(allowlist: Set<string>, limit: number): Promise<CandidateToken[]> {
@@ -116,12 +123,7 @@ async function fetchAllowlistDexCandidates(allowlist: Set<string>, limit: number
 
   for (const address of allowlist) {
     try {
-      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
-      if (!response.ok) {
-        continue;
-      }
-
-      const payload = (await response.json().catch(() => null)) as DexScreenerResponse | null;
+      const payload = await fetchJsonWithTimeout<DexScreenerResponse>(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
       const bscPairs = (payload?.pairs ?? []).filter((pair) => pair.chainId === "bsc");
       if (bscPairs.length === 0) {
         continue;
@@ -307,29 +309,42 @@ export async function scanBep20Candidates(): Promise<CandidateScanResult> {
 
   const base = (useFallbackTop ? sorted : allowlistFiltered).slice(0, config.CANDIDATE_LIMIT);
 
+  console.log(`[candidate-scan] enriching ${base.length} token(s) with CoinGecko (concurrency=${COINGECKO_CONCURRENCY})`);
+
   const tokens: CandidateToken[] = [];
-  for (const [index, token] of base.entries()) {
-    const address = String(token.tokenContractAddress ?? "").toLowerCase();
-    const coinGecko = address ? await fetchCoinGeckoContract(address) : null;
-    const fdvCoinGecko = coinGecko?.market_data?.fully_diluted_valuation?.usd ?? null;
-    const marketCapCoinGecko = coinGecko?.market_data?.market_cap?.usd ?? null;
+  for (let start = 0; start < base.length; start += COINGECKO_CONCURRENCY) {
+    const chunk = base.slice(start, start + COINGECKO_CONCURRENCY);
 
-    if (config.CANDIDATE_REQUIRE_EXPLICIT_FDV && (fdvCoinGecko === null || fdvCoinGecko < fdvMinUsd)) {
-      continue;
+    const enriched = await Promise.all(
+      chunk.map(async (token, localIndex) => {
+        const index = start + localIndex;
+        const address = String(token.tokenContractAddress ?? "").toLowerCase();
+        const coinGecko = address ? await fetchCoinGeckoContract(address) : null;
+        const fdvCoinGecko = coinGecko?.market_data?.fully_diluted_valuation?.usd ?? null;
+        const marketCapCoinGecko = coinGecko?.market_data?.market_cap?.usd ?? null;
+
+        if (config.CANDIDATE_REQUIRE_EXPLICIT_FDV && (fdvCoinGecko === null || fdvCoinGecko < fdvMinUsd)) {
+          return null;
+        }
+
+        return {
+          rank: index + 1,
+          symbol: String(token.tokenSymbol ?? ""),
+          address,
+          priceUsd: asNumber(token.price),
+          holders: asNumber(token.holders),
+          liquidityUsd: asNumber(token.liquidity),
+          marketCapUsdOkx: asNumber(token.marketCap),
+          fdvUsdCoinGecko: fdvCoinGecko,
+          marketCapUsdCoinGecko: marketCapCoinGecko,
+          symbolCoinGecko: coinGecko?.symbol ?? null
+        } satisfies CandidateToken;
+      })
+    );
+
+    for (const item of enriched) {
+      if (item) tokens.push(item);
     }
-
-    tokens.push({
-      rank: index + 1,
-      symbol: String(token.tokenSymbol ?? ""),
-      address,
-      priceUsd: asNumber(token.price),
-      holders: asNumber(token.holders),
-      liquidityUsd: asNumber(token.liquidity),
-      marketCapUsdOkx: asNumber(token.marketCap),
-      fdvUsdCoinGecko: fdvCoinGecko,
-      marketCapUsdCoinGecko: marketCapCoinGecko,
-      symbolCoinGecko: coinGecko?.symbol ?? null
-    });
   }
 
   if (tokens.length === 0) {

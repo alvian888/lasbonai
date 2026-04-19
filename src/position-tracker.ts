@@ -63,6 +63,12 @@ export async function recordTrade(
     state.costBasisUsd += amountUsd;
     state.totalBoughtTokens += tokenAmount;
   } else {
+    // Reduce cost basis proportionally to the fraction of holdings sold
+    const tokensHeld = state.totalBoughtTokens - state.totalSoldTokens;
+    if (tokensHeld > 0) {
+      const proportion = Math.min(tokenAmount / tokensHeld, 1);
+      state.costBasisUsd = Math.max(0, state.costBasisUsd * (1 - proportion));
+    }
     state.totalSoldUsd += amountUsd;
     state.totalSoldTokens += tokenAmount;
   }
@@ -115,8 +121,19 @@ export async function getPositionInfo(
   ]);
 
   const costBasis = tradeState.costBasisUsd;
-  const unrealizedPnlPct = costBasis > 0
-    ? ((baseBalance.usdValue - costBasis) / costBasis) * 100
+
+  // Auto-seed cost basis for pre-existing positions not acquired through the bot
+  if (costBasis === 0 && baseBalance.balance > 0 && baseBalance.usdValue > 0) {
+    const seededCost = baseBalance.usdValue;
+    tradeState.costBasisUsd = seededCost;
+    tradeState.totalBoughtTokens = baseBalance.balance;
+    await saveTradeState(tradeState);
+    console.log(`[position-tracker] Auto-seeded costBasis=$${seededCost.toFixed(2)} for ${baseBalance.balance.toFixed(2)} pre-existing tokens`);
+  }
+
+  const effectiveCostBasis = tradeState.costBasisUsd;
+  const unrealizedPnlPct = effectiveCostBasis > 0
+    ? ((baseBalance.usdValue - effectiveCostBasis) / effectiveCostBasis) * 100
     : 0;
 
   return {
@@ -124,7 +141,7 @@ export async function getPositionInfo(
     baseTokenValueUsd: baseBalance.usdValue,
     baseTokenPriceUsd: baseBalance.priceUsd,
     quoteTokenBalance: quoteBalance.balance,
-    costBasisUsd: costBasis,
+    costBasisUsd: effectiveCostBasis,
     unrealizedPnlPct,
     lastTradeAction: tradeState.lastTradeAction,
     lastTradeTimestamp: tradeState.lastTradeTimestamp,

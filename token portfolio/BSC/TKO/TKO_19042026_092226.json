@@ -1,0 +1,52 @@
+{
+  "symbol": "TKO",
+  "name": "Tokocrypto",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x9f589e3eabe42ebc94a44727b3f3531c0c877809",
+  "decimals": 18,
+  "category": "hold",
+  "timestamp": "2026-04-19T02:22:26.657Z",
+  "timestampUnix": 1776565338903,
+  "price": {
+    "usd": 0.06601078640368763,
+    "idr": 1108.981211581952
+  },
+  "change": {
+    "1h": 0,
+    "4h": -1.04,
+    "24h": -3.29
+  },
+  "range24h": {
+    "high": 0.0704772764987656,
+    "low": 0.06566805811940055
+  },
+  "market": {
+    "volume24h_usd": 5847.917711012592,
+    "volume24h_idr": 98245017.54501155,
+    "liquidity_usd": 80379.25294177087,
+    "liquidity_idr": 1350371449.4217505,
+    "txs24h": 388
+  },
+  "portfolio": {
+    "holdings": 0.3816058293489619,
+    "entryPrice": 0.06141,
+    "entryCost_usd": 0,
+    "entryCost_idr": 0,
+    "currentValue_usd": 0.025190100891556398,
+    "currentValue_idr": 423.1936949781475,
+    "pnl_usd": 0.025190100891556398,
+    "pnl_idr": 423.1936949781475,
+    "pnl_pct": 7.49
+  },
+  "zones": {
+    "buyZone": 0.05834,
+    "sellTarget1": 0.07062,
+    "sellTarget2": 0.07369,
+    "sellTarget3": 0.07983,
+    "stopLoss": 0.0565,
+    "trailingStop": 0.06773088490349236,
+    "trailingStopPct": 6
+  },
+  "signal": "TRAILING_STOP"
+}

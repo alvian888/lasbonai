@@ -1,0 +1,52 @@
+{
+  "symbol": "DOGE",
+  "name": "Dogecoin",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0xba2ae424d960c26247dd6c32edc70b295c744c43",
+  "decimals": 8,
+  "category": "swing",
+  "timestamp": "2026-04-19T02:23:27.030Z",
+  "timestampUnix": 1776565398501,
+  "price": {
+    "usd": 0.09486491586562051,
+    "idr": 1593.7305865424246
+  },
+  "change": {
+    "1h": -0.1,
+    "4h": -0.07,
+    "24h": -4.53
+  },
+  "range24h": {
+    "high": 0.10087190886493187,
+    "low": 0.09429759948222585
+  },
+  "market": {
+    "volume24h_usd": 450798.558040211,
+    "volume24h_idr": 7573415775.075544,
+    "liquidity_usd": 2957598.5612377804,
+    "liquidity_idr": 49687655828.79471,
+    "txs24h": 6008
+  },
+  "portfolio": {
+    "holdings": 0.31157143,
+    "entryPrice": 0.097,
+    "entryCost_usd": 0,
+    "entryCost_idr": 0,
+    "currentValue_usd": 0.02955719749308107,
+    "currentValue_idr": 496.560917883762,
+    "pnl_usd": 0.02955719749308107,
+    "pnl_idr": 496.560917883762,
+    "pnl_pct": -2.2
+  },
+  "zones": {
+    "buyZone": 0.09215,
+    "sellTarget1": 0.11155,
+    "sellTarget2": 0.12125,
+    "sellTarget3": 0.1358,
+    "stopLoss": 0.08924,
+    "trailingStop": 0.09806438145061099,
+    "trailingStopPct": 6
+  },
+  "signal": "TRAILING_STOP"
+}

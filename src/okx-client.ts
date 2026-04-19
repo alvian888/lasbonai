@@ -106,26 +106,37 @@ export class OkxDexClient {
     const pathWithQuery = query ? `${path}?${query}` : path;
     const url = `${config.OKX_DEX_BASE_URL}${pathWithQuery}`;
     const bodyText = body ? JSON.stringify(body) : "";
+    const maxRetries = 3;
 
-    const response = await fetch(url, {
-      method,
-      headers: this.buildHeaders(method, pathWithQuery, bodyText),
-      body: bodyText || undefined
-    });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: this.buildHeaders(method, pathWithQuery, bodyText),
+          body: bodyText || undefined
+        });
 
-    const json = (await response.json().catch(() => null)) as
-      | { code?: string; msg?: string; data?: unknown[] }
-      | null;
+        const json = (await response.json().catch(() => null)) as
+          | { code?: string; msg?: string; data?: unknown[] }
+          | null;
 
-    if (!response.ok) {
-      throw new Error(`OKX HTTP ${response.status}: ${JSON.stringify(json)}`);
+        if (!response.ok) {
+          throw new Error(`OKX HTTP ${response.status}: ${JSON.stringify(json)}`);
+        }
+
+        if (json && json.code && json.code !== "0") {
+          throw new Error(`OKX error ${json.code}: ${json.msg ?? "unknown error"}`);
+        }
+
+        return json as T;
+      } catch (error) {
+        if (attempt >= maxRetries) throw error;
+        const delay = 1000 * 2 ** (attempt - 1); // 1s, 2s, 4s
+        console.log(`[okx-client] Request attempt ${attempt} failed, retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
     }
-
-    if (json && json.code && json.code !== "0") {
-      throw new Error(`OKX error ${json.code}: ${json.msg ?? "unknown error"}`);
-    }
-
-    return json as T;
+    throw new Error("unreachable");
   }
 
   private async runOnchainos<T>(args: string[]): Promise<T> {
@@ -144,6 +155,17 @@ export class OkxDexClient {
   }
 
   async quoteSwap(params: SwapParams): Promise<QuoteSummary> {
+    // Skip actual quote if amount is zero — return a no-op summary
+    if (!params.amount || params.amount === "0") {
+      return {
+        fromTokenAddress: params.fromTokenAddress,
+        toTokenAddress: params.toTokenAddress,
+        amountIn: "0",
+        amountOut: "0",
+        raw: {}
+      };
+    }
+
     if (!hasOkxCredentials()) {
       const result = await this.runOnchainos<{ data?: Array<Record<string, unknown>> }>([
         "swap",
@@ -203,6 +225,11 @@ export class OkxDexClient {
   }
 
   async buildSwap(params: SwapParams): Promise<SwapBuildResult> {
+    // Guard: reject zero/empty amount to prevent wasted gas
+    if (!params.amount || params.amount === "0") {
+      throw new Error(`buildSwap rejected: amount is ${params.amount}`);
+    }
+
     if (!hasOkxCredentials()) {
       if (!params.walletAddress) {
         throw new Error("walletAddress is required when building swaps via Onchain OS");

@@ -1,0 +1,14 @@
+{
+  "inputs": [],
+  "servers": {
+    "okx-agentic-bot": {
+      "type": "http",
+      "url": "http://127.0.0.1:8787/mcp",
+      "auth": {
+        "type": "oauth",
+        "providerId": "google",
+        "clientId": "204421016317-9fnkralojtes0u7lv0skua2spnm9j3u8.apps.googleusercontent.com"
+      }
+    }
+  }
+}

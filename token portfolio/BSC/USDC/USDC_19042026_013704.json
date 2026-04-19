@@ -1,0 +1,52 @@
+{
+  "symbol": "USDC",
+  "name": "USD Coin",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+  "decimals": 18,
+  "category": "stablecoin",
+  "timestamp": "2026-04-18T18:37:04.233Z",
+  "timestampUnix": 1776537421734,
+  "price": {
+    "usd": 1.0000083938665068,
+    "idr": 16800.141016957314
+  },
+  "change": {
+    "1h": 0.01,
+    "4h": 0,
+    "24h": 0.03
+  },
+  "range24h": {
+    "high": 1.0223034455157598,
+    "low": 0.9815795629166322
+  },
+  "market": {
+    "volume24h_usd": 128240146.5207513,
+    "volume24h_idr": 2154434461548.6218,
+    "liquidity_usd": 146159966.24560437,
+    "liquidity_idr": 2455487432926.1533,
+    "txs24h": 613104
+  },
+  "portfolio": {
+    "holdings": 1,
+    "entryPrice": 1,
+    "entryCost_usd": 1,
+    "entryCost_idr": 16800,
+    "currentValue_usd": 1.0000083938665068,
+    "currentValue_idr": 16800.141016957314,
+    "pnl_usd": 0.000008393866506750669,
+    "pnl_idr": 0.14101695731341124,
+    "pnl_pct": 0
+  },
+  "zones": {
+    "buyZone": 0.995,
+    "sellTarget1": 1.005,
+    "sellTarget2": 1.005,
+    "sellTarget3": 1.005,
+    "stopLoss": 0.98,
+    "trailingStop": 1,
+    "trailingStopPct": 0
+  },
+  "signal": "STABLE"
+}

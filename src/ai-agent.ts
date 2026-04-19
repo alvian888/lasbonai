@@ -30,23 +30,24 @@ function normalizeDecision(content: string): AgentDecision {
   try {
     const parsed = JSON.parse(tryExtractJsonObject(content)) as Record<string, unknown>;
     const rawAction = typeof parsed.action === "string" ? parsed.action.toLowerCase() : "";
+    const hasReasoning = typeof parsed.reasoning === "string" && parsed.reasoning.trim().length > 0;
     const candidate = {
-      action: rawAction === "buy" || rawAction === "sell" || rawAction === "hold" ? rawAction : "hold",
+      action: rawAction === "buy" || rawAction === "sell" || rawAction === "hold"
+        ? (hasReasoning ? rawAction : "hold")
+        : "hold",
       confidence:
-        typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
+        typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence) && hasReasoning
           ? Math.min(1, Math.max(0, parsed.confidence))
-          : rawAction === "buy" || rawAction === "sell"
-            ? 0.55
-            : 0,
+          : 0,
       reasoning:
         typeof parsed.reasoning === "string" && parsed.reasoning.trim()
           ? parsed.reasoning.trim()
-          : rawAction === "buy" || rawAction === "sell"
-            ? "Model returned partial output; action retained with conservative confidence."
-            : "Model response was incomplete, so the bot downgraded to a safe decision.",
+          : "Model returned incomplete output.",
       riskNotes: Array.isArray(parsed.riskNotes)
         ? parsed.riskNotes.filter((item): item is string => typeof item === "string")
-        : [],
+        : typeof parsed.reasoning === "string" && parsed.reasoning.trim()
+          ? []
+          : ["Model output was partial; downgraded to hold for safety."],
       preferredAmount: typeof parsed.preferredAmount === "string" ? parsed.preferredAmount : undefined
     };
 
@@ -82,7 +83,7 @@ export class AiTradeAgent {
         {
           role: "system",
           content:
-            "You are a crypto execution agent. Reply with strict JSON only. Decide one action: buy, sell, or hold. Be conservative, explain risk briefly, and keep confidence realistic. Consider the current position: if already holding significant tokens and in profit, prefer selling to lock gains. If position is large, do NOT recommend buying more."
+            "You are a crypto execution agent. Reply with strict JSON only: {\"action\":\"buy\"|\"sell\"|\"hold\", \"confidence\":0.0-1.0, \"reasoning\":\"...\", \"riskNotes\":[]}. Be balanced: buy when price is attractive and position is small relative to max, sell only when clearly in profit above take-profit target or risk is elevated, hold when uncertain. Do NOT default to selling."
         },
         {
           role: "user",

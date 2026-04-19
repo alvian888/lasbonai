@@ -80,26 +80,63 @@ function getQuoteMetrics(quote: QuoteSummary): QuoteMetrics {
   };
 }
 
-function inferSignal(context?: string) {
-  const text = (context ?? "").toLowerCase();
+function inferSignalFromTa(request: TradingRequest) {
+  const taSignals: number[] = [];
+  const reasons: string[] = [];
 
-  if (!text.trim()) {
-    return { action: "hold" as const, reason: "No market context was supplied." };
+  if (request.rsi !== undefined) {
+    if (request.rsi <= 35) {
+      taSignals.push(1);
+      reasons.push(`RSI ${request.rsi.toFixed(1)} indicates oversold momentum`);
+    } else if (request.rsi >= 65) {
+      taSignals.push(-1);
+      reasons.push(`RSI ${request.rsi.toFixed(1)} indicates overbought momentum`);
+    } else {
+      reasons.push(`RSI ${request.rsi.toFixed(1)} is neutral`);
+    }
   }
 
-  if (/(prioritas aman|dry-run|watch|observe|sideline|wait)/.test(text)) {
-    return { action: "hold" as const, reason: "Context explicitly prioritizes safety or observation." };
+  if (request.macd !== undefined && request.macdSignal !== undefined) {
+    if (request.macd > request.macdSignal) {
+      taSignals.push(1);
+      reasons.push(`MACD (${request.macd.toFixed(4)}) is above signal (${request.macdSignal.toFixed(4)})`);
+    } else if (request.macd < request.macdSignal) {
+      taSignals.push(-1);
+      reasons.push(`MACD (${request.macd.toFixed(4)}) is below signal (${request.macdSignal.toFixed(4)})`);
+    }
   }
 
-  if (/(bullish|oversold|breakout|uptrend|akumulasi|accumulate)/.test(text)) {
-    return { action: "buy" as const, reason: "Context suggests a bullish or accumulation setup." };
+  if (request.emaFast !== undefined && request.emaSlow !== undefined) {
+    if (request.emaFast > request.emaSlow) {
+      taSignals.push(1);
+      reasons.push(`EMA fast (${request.emaFast.toFixed(6)}) is above EMA slow (${request.emaSlow.toFixed(6)})`);
+    } else if (request.emaFast < request.emaSlow) {
+      taSignals.push(-1);
+      reasons.push(`EMA fast (${request.emaFast.toFixed(6)}) is below EMA slow (${request.emaSlow.toFixed(6)})`);
+    }
   }
 
-  if (/(bearish|overbought|breakdown|risk-off|distribusi|distribute)/.test(text)) {
-    return { action: "sell" as const, reason: "Context suggests a bearish or de-risking setup." };
+  if (taSignals.length === 0) {
+    return {
+      action: "hold" as const,
+      reason: "No TA metrics supplied (RSI/MACD/EMA), so no directional edge."
+    };
   }
 
-  return { action: "hold" as const, reason: "Context does not provide a clear directional edge." };
+  const score = taSignals.reduce((sum, value) => sum + value, 0);
+
+  if (score > 0) {
+    return { action: "buy" as const, reason: reasons.join("; ") };
+  }
+
+  if (score < 0) {
+    return { action: "sell" as const, reason: reasons.join("; ") };
+  }
+
+  return {
+    action: "hold" as const,
+    reason: `TA signals are mixed. ${reasons.join("; ")}`
+  };
 }
 
 export function evaluateBaselineStrategy(params: {
@@ -110,7 +147,7 @@ export function evaluateBaselineStrategy(params: {
 }): AgentDecision {
   const buyMetrics = getQuoteMetrics(params.buyQuote);
   const sellMetrics = getQuoteMetrics(params.sellQuote);
-  const signal = inferSignal(params.request.marketContext);
+  const signal = inferSignalFromTa(params.request);
   const riskNotes: string[] = [];
   const pos = params.position;
 
@@ -122,22 +159,23 @@ export function evaluateBaselineStrategy(params: {
     riskNotes.push("Sell path is blocked by honeypot characteristics.");
   }
 
-  if ((buyMetrics.priceImpactPercent ?? 0) > 1 || (sellMetrics.priceImpactPercent ?? 0) > 1) {
-    riskNotes.push("Price impact is above the baseline risk threshold of 1%.");
+  if ((buyMetrics.priceImpactPercent ?? 0) > 2.5 || (sellMetrics.priceImpactPercent ?? 0) > 2.5) {
+    riskNotes.push("Price impact is above the baseline risk threshold of 2.5%.");
   }
 
   if ((buyMetrics.feeRatio ?? 0) > 0.05 || (sellMetrics.feeRatio ?? 0) > 0.05) {
     riskNotes.push("Estimated swap fee is too large relative to the notional size.");
   }
 
-  if (
-    (buyMetrics.amountInUsd ?? 0) < config.BASELINE_MIN_NOTIONAL_USD ||
-    (sellMetrics.amountInUsd ?? 0) < config.BASELINE_MIN_NOTIONAL_USD
-  ) {
+  // Direction-aware notional check: only flag the side relevant to the signal
+  if (signal.action === "buy" && (buyMetrics.amountInUsd ?? 0) < config.BASELINE_MIN_NOTIONAL_USD) {
     riskNotes.push(
-      `Trade notional is below baseline minimum of $${config.BASELINE_MIN_NOTIONAL_USD.toFixed(
-        2
-      )} for Ethereum mainnet fee conditions.`
+      `Buy notional ($${(buyMetrics.amountInUsd ?? 0).toFixed(2)}) is below baseline minimum of $${config.BASELINE_MIN_NOTIONAL_USD.toFixed(2)}.`
+    );
+  }
+  if (signal.action === "sell" && (sellMetrics.amountInUsd ?? 0) < config.BASELINE_MIN_NOTIONAL_USD) {
+    riskNotes.push(
+      `Sell notional ($${(sellMetrics.amountInUsd ?? 0).toFixed(2)}) is below baseline minimum of $${config.BASELINE_MIN_NOTIONAL_USD.toFixed(2)}.`
     );
   }
 
@@ -155,17 +193,7 @@ export function evaluateBaselineStrategy(params: {
     const cooldownMs = config.COOLDOWN_SAME_DIRECTION_MIN * 60_000;
     const timeSinceLastTrade = Date.now() - (pos.lastTradeTimestamp || 0);
 
-    // Cooldown: don't trade too frequently (regardless of direction)
-    if (pos.lastTradeAction && timeSinceLastTrade < cooldownMs) {
-      return {
-        action: "hold",
-        confidence: 0.7,
-        reasoning: `Cooldown active: last trade (${pos.lastTradeAction}) was ${Math.round(timeSinceLastTrade / 60_000)}m ago (min ${config.COOLDOWN_SAME_DIRECTION_MIN}m).`,
-        riskNotes: []
-      };
-    }
-
-    // Take profit: if unrealized P&L >= target, sell
+    // Take profit: if unrealized P&L >= target, sell (BEFORE cooldown – TP must always fire)
     if (pos.costBasisUsd > 0 && pos.unrealizedPnlPct >= config.TAKE_PROFIT_PCT && pos.baseTokenValueUsd > 5) {
       return {
         action: "sell",
@@ -175,12 +203,22 @@ export function evaluateBaselineStrategy(params: {
       };
     }
 
-    // Stop loss: if position is underwater, cut losses
+    // Stop loss: if position is underwater, cut losses (BEFORE cooldown – SL must always fire)
     if (pos.costBasisUsd > 0 && pos.unrealizedPnlPct <= -config.STOP_LOSS_PCT && pos.baseTokenValueUsd > 5) {
       return {
         action: "sell",
         confidence: 0.72,
         reasoning: `Stop loss triggered: unrealized P&L ${pos.unrealizedPnlPct.toFixed(1)}% (limit -${config.STOP_LOSS_PCT}%). Cutting losses.`,
+        riskNotes: []
+      };
+    }
+
+    // Cooldown: don't trade too frequently in the same direction
+    if (pos.lastTradeAction && timeSinceLastTrade < cooldownMs && pos.lastTradeAction === signal.action) {
+      return {
+        action: "hold",
+        confidence: 0.7,
+        reasoning: `Cooldown active: last trade (${pos.lastTradeAction}) was ${Math.round(timeSinceLastTrade / 60_000)}m ago (min ${config.COOLDOWN_SAME_DIRECTION_MIN}m).`,
         riskNotes: []
       };
     }
@@ -209,7 +247,7 @@ export function evaluateBaselineStrategy(params: {
   if (signal.action === "hold") {
     return {
       action: "hold",
-      confidence: 0.7,
+      confidence: 0.5,
       reasoning: signal.reason,
       riskNotes
     };

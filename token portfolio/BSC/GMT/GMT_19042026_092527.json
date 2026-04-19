@@ -1,0 +1,52 @@
+{
+  "symbol": "GMT",
+  "name": "GMT Token",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x7Ddc52c4De30e94Be3A6A0A2b259b2850f421989",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-19T02:25:27.225Z",
+  "timestampUnix": 1776565521661,
+  "price": {
+    "usd": 0.29942478928820704,
+    "idr": 5030.336460041878
+  },
+  "change": {
+    "1h": -0.02,
+    "4h": -0.83,
+    "24h": -1.8
+  },
+  "range24h": {
+    "high": 0.3050684388269265,
+    "low": 0.2983457062440681
+  },
+  "market": {
+    "volume24h_usd": 31122.89330969654,
+    "volume24h_idr": 522864607.6029019,
+    "liquidity_usd": 681123.2424310625,
+    "liquidity_idr": 11442870472.84185,
+    "txs24h": 337
+  },
+  "portfolio": {
+    "holdings": 3.315,
+    "entryPrice": 0.3016,
+    "entryCost_usd": 1,
+    "entryCost_idr": 16800,
+    "currentValue_usd": 0.9925931764904063,
+    "currentValue_idr": 16675.565365038827,
+    "pnl_usd": -0.007406823509593652,
+    "pnl_idr": -124.43463496117334,
+    "pnl_pct": -0.72
+  },
+  "zones": {
+    "buyZone": 0.2865,
+    "sellTarget1": 0.3468,
+    "sellTarget2": 0.377,
+    "sellTarget3": 0.4222,
+    "stopLoss": 0.2775,
+    "trailingStop": 0.28367209927272025,
+    "trailingStopPct": 6
+  },
+  "signal": "HOLD"
+}

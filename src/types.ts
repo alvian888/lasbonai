@@ -9,6 +9,11 @@ export interface TradingRequest {
   sellAmount: string;
   slippage?: string;
   marketContext?: string;
+  rsi?: number;
+  macd?: number;
+  macdSignal?: number;
+  emaFast?: number;
+  emaSlow?: number;
 }
 
 export interface QuoteSummary {

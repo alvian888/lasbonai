@@ -25,17 +25,15 @@ export class AgenticTradingBot {
     const slippage = request.slippage ?? config.DEFAULT_SLIPPAGE;
     const buyAmount = clampAmount(request.buyAmount, config.MAX_BUY_AMOUNT);
 
-    // Dynamic sell amount: if take-profit/stop-loss triggered and we have position,
-    // sell a portion of holdings instead of the fixed DEFAULT_SELL_AMOUNT
+    // Dynamic sell amount: sell a portion of actual holdings, never exceed balance
     let sellAmount = clampAmount(request.sellAmount, config.MAX_SELL_AMOUNT);
     if (position && position.baseTokenBalance > 0) {
       const portionTokens = position.baseTokenBalance * (config.SELL_PORTION_PCT / 100);
-      const portionWei = BigInt(Math.floor(portionTokens * 1e18)).toString();
-      const clampedPortion = clampAmount(portionWei, config.MAX_SELL_AMOUNT);
-      // Use the larger of default sell amount or computed portion
-      if (BigInt(clampedPortion) > BigInt(sellAmount)) {
-        sellAmount = clampedPortion;
-      }
+      const balanceWei = BigInt(Math.floor(position.baseTokenBalance * 1e18));
+      const portionWei = BigInt(Math.floor(portionTokens * 1e18));
+      // Use portion of balance, capped to actual balance
+      const safeAmount = portionWei > balanceWei ? balanceWei : portionWei;
+      sellAmount = clampAmount(safeAmount.toString(), config.MAX_SELL_AMOUNT);
     }
 
     const buyQuote = await this.okx.quoteSwap({
@@ -74,13 +72,47 @@ export class AgenticTradingBot {
 
     const aiFallbackHold =
       aiDecision.action === "hold" &&
-      /Model response was incomplete|Model returned non-JSON content|AI decision service unavailable/i.test(
+      /Model response was incomplete|Model returned incomplete output|Model returned non-JSON content|Model returned partial|Model output was partial|AI decision service unavailable/i.test(
         aiDecision.reasoning
       );
 
-    const decision = baselineDecision.action === "hold" || aiFallbackHold ? baselineDecision : aiDecision;
-    const decisionSource: "baseline" | "ai" =
-      baselineDecision.action === "hold" || aiFallbackHold ? "baseline" : "ai";
+    // Decision logic: combine baseline risk guard with AI intelligence
+    let decision: AgentDecision;
+    let decisionSource: "baseline" | "ai";
+
+    if (aiFallbackHold) {
+      // AI service failure: fall back to baseline
+      decision = baselineDecision;
+      decisionSource = "baseline";
+    } else if (baselineDecision.action === "hold" && baselineDecision.confidence >= 0.65) {
+      // Baseline hard hold (risk block or position management): respect it
+      decision = baselineDecision;
+      decisionSource = "baseline";
+    } else if (baselineDecision.action === "hold") {
+      // Baseline neutral (no clear signal, confidence < 0.65): defer to AI
+      decision = aiDecision;
+      decisionSource = "ai";
+    } else if (aiDecision.action === baselineDecision.action) {
+      // Baseline and AI agree on direction: boost confidence
+      decision = {
+        ...aiDecision,
+        confidence: Math.min(1, Math.max(aiDecision.confidence, baselineDecision.confidence) + 0.05),
+        reasoning: `[Baseline+AI agree] ${aiDecision.reasoning}`,
+      };
+      decisionSource = "ai";
+    } else if (
+      aiDecision.action !== "hold" &&
+      aiDecision.confidence >= 0.85 &&
+      baselineDecision.confidence < 0.55
+    ) {
+      // AI very strongly disagrees AND baseline signal is weak: respect AI
+      decision = aiDecision;
+      decisionSource = "ai";
+    } else {
+      // Default: trust baseline directional signal over unreliable AI
+      decision = baselineDecision;
+      decisionSource = "baseline";
+    }
 
     const result: BotRunResult = {
       dryRun: config.DRY_RUN,
@@ -104,6 +136,12 @@ export class AgenticTradingBot {
       return result;
     }
 
+    // Guard: block sells on tiny positions (< $5) to prevent bleeding dust
+    if (decision.action === "sell" && position && position.baseTokenValueUsd < 5) {
+      console.log(`[bot] Blocked sell: position value $${position.baseTokenValueUsd.toFixed(2)} < $5 minimum. Holding.`);
+      return { ...result, decision: { ...decision, action: "hold", reasoning: `Blocked sell: position too small ($${position.baseTokenValueUsd.toFixed(2)} < $5)` } };
+    }
+
     if (decision.confidence < config.MAX_CONFIDENCE_TO_EXECUTE) {
       return {
         ...result,
@@ -115,6 +153,13 @@ export class AgenticTradingBot {
     }
 
     const selectedAmount = decision.preferredAmount ?? (decision.action === "buy" ? buyAmount : sellAmount);
+
+    // Guard: reject execution when amount is 0, empty, or invalid
+    if (!selectedAmount || selectedAmount === "0" || BigInt(selectedAmount) <= 0n) {
+      console.log(`[bot] Blocked execution: selectedAmount is ${selectedAmount}. Returning hold.`);
+      return { ...result, decision: { ...decision, action: "hold", reasoning: `Blocked: ${decision.action} amount was zero or invalid` } };
+    }
+
     const swap = await this.okx.buildSwap({
       chainId: request.chainId,
       fromTokenAddress: decision.action === "buy" ? request.quoteTokenAddress : request.baseTokenAddress,

@@ -1,0 +1,52 @@
+{
+  "symbol": "AXL",
+  "name": "Axelar",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x8b1f4432f943c465a973fedc6d7aa50fc96f1f65",
+  "decimals": 6,
+  "category": "moonshot",
+  "timestamp": "2026-04-19T02:22:26.657Z",
+  "timestampUnix": 1776565338112,
+  "price": {
+    "usd": 0.058904672072214975,
+    "idr": 989.5984908132116
+  },
+  "change": {
+    "1h": -6.11,
+    "4h": -8.55,
+    "24h": -11.04
+  },
+  "range24h": {
+    "high": 0.09286202058199321,
+    "low": 0.044147993971493084
+  },
+  "market": {
+    "volume24h_usd": 2309.332685309312,
+    "volume24h_idr": 38796789.11319645,
+    "liquidity_usd": 2649.2359060989397,
+    "liquidity_idr": 44507163.222462185,
+    "txs24h": 456
+  },
+  "portfolio": {
+    "holdings": 0.00052,
+    "entryPrice": 0.04913,
+    "entryCost_usd": 0,
+    "entryCost_idr": 0,
+    "currentValue_usd": 0.000030630429477551785,
+    "currentValue_idr": 0.51459121522287,
+    "pnl_usd": 0.000030630429477551785,
+    "pnl_idr": 0.51459121522287,
+    "pnl_pct": 19.9
+  },
+  "zones": {
+    "buyZone": 0.0561,
+    "sellTarget1": 0.07631,
+    "sellTarget2": 0.08624,
+    "sellTarget3": 0.09946,
+    "stopLoss": 0.05434,
+    "trailingStop": 0.07862346727479308,
+    "trailingStopPct": 8
+  },
+  "signal": "TRAILING_STOP"
+}

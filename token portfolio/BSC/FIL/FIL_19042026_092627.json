@@ -1,0 +1,52 @@
+{
+  "symbol": "FIL",
+  "name": "Filecoin",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x0D8Ce2A99Bb6e3B7Db580eD848240e4a0F9aE153",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-19T02:26:27.000Z",
+  "timestampUnix": 1776565579784,
+  "price": {
+    "usd": 0.9315105774069705,
+    "idr": 15649.377700437104
+  },
+  "change": {
+    "1h": -0.29,
+    "4h": -1.81,
+    "24h": -5.11
+  },
+  "range24h": {
+    "high": 0.9945985499966691,
+    "low": 0.9275295609828308
+  },
+  "market": {
+    "volume24h_usd": 68321.61774148443,
+    "volume24h_idr": 1147803178.0569384,
+    "liquidity_usd": 246547.01080129083,
+    "liquidity_idr": 4141989781.461686,
+    "txs24h": 2286
+  },
+  "portfolio": {
+    "holdings": 0.3612285173132833,
+    "entryPrice": 1.0003,
+    "entryCost_usd": 0,
+    "entryCost_idr": 0,
+    "currentValue_usd": 0.3364881847383604,
+    "currentValue_idr": 5653.001503604454,
+    "pnl_usd": 0.3364881847383604,
+    "pnl_idr": 5653.001503604454,
+    "pnl_pct": -6.88
+  },
+  "zones": {
+    "buyZone": 0.9503,
+    "sellTarget1": 1.1503,
+    "sellTarget2": 1.2504,
+    "sellTarget3": 1.4004,
+    "stopLoss": 0.9203,
+    "trailingStop": 0.9719793258605233,
+    "trailingStopPct": 6
+  },
+  "signal": "TRAILING_STOP"
+}

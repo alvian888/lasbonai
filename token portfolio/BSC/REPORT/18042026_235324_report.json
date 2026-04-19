@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-04-18T16:53:24.212Z",
+  "timestampWIB": "18/4/2026, 23.53.24",
+  "cycleNumber": 3770,
+  "portfolio": {
+    "totalValueUSD": 0,
+    "totalValueIDR": 0,
+    "totalCostUSD": 0,
+    "totalCostIDR": 0,
+    "totalPnlUSD": 0,
+    "totalPnlIDR": 0,
+    "totalPnlPct": 0,
+    "weeklyPnlPct": -100,
+    "weeklyTargetPct": 15,
+    "pendingProfitUSD": 31.784002448172743
+  },
+  "tokens": [],
+  "topGainers": [],
+  "topLosers": [],
+  "marketSentiment": "neutral",
+  "keyInsights": [
+    "⚪ Market mixed: 0 naik, 0 turun dari 0 token"
+  ]
+}
