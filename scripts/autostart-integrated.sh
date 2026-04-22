@@ -53,7 +53,7 @@ acquire_lock
 trap cleanup_lock EXIT
 
 is_healthy() {
-  curl -sS -m 3 "$HEALTH_URL" >/dev/null 2>&1
+  curl -fsS -m 3 "$HEALTH_URL" >/dev/null 2>&1
 }
 
 stop_existing_bot() {

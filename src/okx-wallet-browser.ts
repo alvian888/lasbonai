@@ -1,9 +1,8 @@
 /**
  * okx-wallet-browser.ts
  *
- * Launch Chromium with OKX Wallet extension using the Google OAuth Chrome profile
- * (rahmatginanjar120@gmail.com). This allows the bot to interact with OKX Web3
- * wallet for on-chain operations.
+ * Launch Chromium with OKX Wallet extension using a pre-authenticated Chrome profile.
+ * This allows the bot to interact with OKX Web3 wallet for on-chain operations.
  *
  * Usage:
  *   npx tsx src/okx-wallet-browser.ts [--headless] [--url <url>]
@@ -24,7 +23,7 @@ import { writeAnodosSessionStatus } from "./anodos-session-bridge.js";
 
 const OKX_EXTENSION_ID = "mcohilncbfahbmgdjkbpemcciiolgcge";
 
-// System Chrome profile (already authenticated with rahmatginanjar120@gmail.com)
+// System Chrome profile (pre-authenticated)
 const SYSTEM_CHROME_PROFILE = path.resolve(
   process.env.HOME ?? "/root",
   ".config/google-chrome"
@@ -120,7 +119,7 @@ export async function launchOkxWalletBrowser(options?: {
   }
 
   const context = await chromium.launchPersistentContext(LOCAL_PROFILE, {
-    headless: false, // OKX Wallet needs headed mode for popup interactions
+    headless,
     executablePath,
     args: [
       `--disable-extensions-except=${extensionPath}`,
@@ -128,7 +127,6 @@ export async function launchOkxWalletBrowser(options?: {
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-blink-features=AutomationControlled",
-      ...(headless ? ["--headless=new"] : []),
     ],
     viewport: { width: 1440, height: 900 },
     ignoreDefaultArgs: ["--disable-extensions"],
