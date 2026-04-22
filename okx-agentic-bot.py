@@ -192,12 +192,17 @@ def cmd_start(args: argparse.Namespace) -> None:
     # --- 3. Express API Server ---
     if server_pid is None:
         threadpool = os.environ.get("BOT_UV_THREADPOOL_SIZE", str(os.cpu_count() or 4))
-        server_proc = run_npm_script("dev", env_extra={"UV_THREADPOOL_SIZE": threadpool})
+        server_script = os.environ.get("BOT_SERVER_SCRIPT", "start")
+        if server_script == "start" and not (PROJECT_DIR / "dist" / "server.js").exists():
+            log("start", "dist/server.js not found, falling back to npm run dev")
+            server_script = "dev"
+
+        server_proc = run_npm_script(server_script, env_extra={"UV_THREADPOOL_SIZE": threadpool})
         pids["server_pid"] = server_proc.pid
 
         if not wait_for_health():
             log("start", "WARNING: server health check failed — continuing anyway")
-            log("start", f"check log: {LOG_DIR / 'dev.log'}")
+            log("start", f"check log: {LOG_DIR / f'{server_script}.log'}")
     else:
         pids["server_pid"] = server_pid
         log("start", f"reusing existing server (PID {server_pid})")
