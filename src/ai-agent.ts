@@ -30,23 +30,24 @@ function normalizeDecision(content: string): AgentDecision {
   try {
     const parsed = JSON.parse(tryExtractJsonObject(content)) as Record<string, unknown>;
     const rawAction = typeof parsed.action === "string" ? parsed.action.toLowerCase() : "";
+    const hasReasoning = typeof parsed.reasoning === "string" && parsed.reasoning.trim().length > 0;
     const candidate = {
-      action: rawAction === "buy" || rawAction === "sell" || rawAction === "hold" ? rawAction : "hold",
+      action: rawAction === "buy" || rawAction === "sell" || rawAction === "hold"
+        ? (hasReasoning ? rawAction : "hold")
+        : "hold",
       confidence:
-        typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence)
+        typeof parsed.confidence === "number" && Number.isFinite(parsed.confidence) && hasReasoning
           ? Math.min(1, Math.max(0, parsed.confidence))
-          : rawAction === "buy" || rawAction === "sell"
-            ? 0.55
-            : 0,
+          : 0,
       reasoning:
         typeof parsed.reasoning === "string" && parsed.reasoning.trim()
           ? parsed.reasoning.trim()
-          : rawAction === "buy" || rawAction === "sell"
-            ? "Model returned partial output; action retained with conservative confidence."
-            : "Model response was incomplete, so the bot downgraded to a safe decision.",
+          : "Model returned incomplete output.",
       riskNotes: Array.isArray(parsed.riskNotes)
         ? parsed.riskNotes.filter((item): item is string => typeof item === "string")
-        : [],
+        : typeof parsed.reasoning === "string" && parsed.reasoning.trim()
+          ? []
+          : ["Model output was partial; downgraded to hold for safety."],
       preferredAmount: typeof parsed.preferredAmount === "string" ? parsed.preferredAmount : undefined
     };
 
@@ -82,22 +83,28 @@ export class AiTradeAgent {
         {
           role: "system",
           content:
-            "You are a crypto execution agent. Reply with strict JSON only. Decide one action: buy, sell, or hold. Be conservative, explain risk briefly, and keep confidence realistic. Consider the current position: if already holding significant tokens and in profit, prefer selling to lock gains. If position is large, do NOT recommend buying more."
+            "You are a risk-aware crypto execution agent. Respond with strict JSON only: {\"action\":\"buy\"|\"sell\"|\"hold\", \"confidence\":0.0-1.0, \"reasoning\":\"...\", \"riskNotes\":[], \"preferredAmount\":\"atomic amount string\"}.\n\nUse the provided market quotes, position context, and risk limits. Prioritize low slippage, low price impact, and risk-calibrated position sizing. Recognize strong market context cues (e.g., \"Bullish breakout\", \"accumulation\") and act on them with confidence >= 0.7 when quote quality is acceptable. Only recommend execution when the trade has a clear edge and the confidence level justifies live execution. If you are uncertain, return hold with low confidence."
         },
         {
           role: "user",
           content: JSON.stringify(
             {
-              task: "Decide the best next trade action.",
+              task: "Decide the best next trade action for the requested market scan.",
+              guidance: {
+                target: "Maximize weekly P&L with risk-calibrated execution. Prefer acting on high-quality edges over passive holding.",
+                avoid: ["high slippage", "low liquidity", "weak signals", "selling into a loss unless stop-loss conditions are met"],
+                preferredAmountUnits: "same atomic units as request.buyAmount and request.sellAmount"
+              },
               guardrails: {
                 allowedActions: ["buy", "sell", "hold"],
                 maxConfidenceToExecute: config.MAX_CONFIDENCE_TO_EXECUTE,
-                dryRun: config.DRY_RUN
+                dryRun: config.DRY_RUN,
+                defaultSlippagePercent: config.DEFAULT_SLIPPAGE
               },
               request: params.request,
               buyQuote: params.buyQuote,
               sellQuote: params.sellQuote,
-              ...(params.positionContext ? { currentPosition: params.positionContext } : {})
+              position: params.positionContext ?? "No current position information provided."
             },
             null,
             2

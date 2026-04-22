@@ -1,0 +1,52 @@
+{
+  "symbol": "USDT",
+  "name": "Tether USD",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x55d398326f99059ff775485246999027b3197955",
+  "decimals": 18,
+  "category": "stablecoin",
+  "timestamp": "2026-04-18T18:40:04.203Z",
+  "timestampUnix": 1776537600106,
+  "price": {
+    "usd": 0.9999865556539186,
+    "idr": 16799.774134985833
+  },
+  "change": {
+    "1h": -0.01,
+    "4h": -0.02,
+    "24h": -0.01
+  },
+  "range24h": {
+    "high": 1.0251966084860638,
+    "low": 0.9753529120794074
+  },
+  "market": {
+    "volume24h_usd": 2964698937.7620926,
+    "volume24h_idr": 49806942154403.16,
+    "liquidity_usd": 1326644252.3376968,
+    "liquidity_idr": 22287623439273.305,
+    "txs24h": 3866111
+  },
+  "portfolio": {
+    "holdings": 140.27633912409866,
+    "entryPrice": 1,
+    "entryCost_usd": 18,
+    "entryCost_idr": 302400,
+    "currentValue_usd": 140.27445320044845,
+    "currentValue_idr": 2356610.8137675337,
+    "pnl_usd": 122.27445320044845,
+    "pnl_idr": 2054210.813767534,
+    "pnl_pct": 0
+  },
+  "zones": {
+    "buyZone": 0.995,
+    "sellTarget1": 1.005,
+    "sellTarget2": 1.005,
+    "sellTarget3": 1.005,
+    "stopLoss": 0.98,
+    "trailingStop": 1,
+    "trailingStopPct": 0
+  },
+  "signal": "STABLE"
+}

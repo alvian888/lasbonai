@@ -1,0 +1,151 @@
+{
+  "timestamp": "2026-04-20T14:10:21.794241",
+  "date_label": "20042026_141021",
+  "wallet": "0x29aa2b1b72c888cb20f3c78e2d21ba225481b8a4",
+  "chain": "BSC",
+  "chain_id": 56,
+  "source": "BSC RPC direct balanceOf",
+  "total_tokens": 19,
+  "tokens": [
+    {
+      "symbol": "BNB",
+      "contract": "native",
+      "decimals": 18,
+      "balance": 0.01396849545589202,
+      "balance_raw": "0x31a045c9b1f233"
+    },
+    {
+      "symbol": "USDT",
+      "contract": "0x55d398326f99059fF775485246999027B3197955",
+      "decimals": 18,
+      "balance": 55.77717467754457,
+      "balance_raw": "0x000000000000000000000000000000000000000000000003061054d95df51e75"
+    },
+    {
+      "symbol": "SAPI",
+      "contract": "0x1ae102c0c30d604e7089fb210dd4b42c01287f32",
+      "decimals": 18,
+      "balance": 12169137.99099191,
+      "balance_raw": "0x0000000000000000000000000000000000000000000a10ea4ad7ceccc6b7d5dd"
+    },
+    {
+      "symbol": "BTCB",
+      "contract": "0x7130d2a12b9bcbfae4f2634d864a1ee1ce3ead9c",
+      "decimals": 18,
+      "balance": 0.00083995846075709,
+      "balance_raw": "0x0000000000000000000000000000000000000000000000000002fbf011adf462"
+    },
+    {
+      "symbol": "ETH",
+      "contract": "0x2170ed0880ac9a755fd29b2688956bd959f933f8",
+      "decimals": 18,
+      "balance": 0.017768245699050562,
+      "balance_raw": "0x000000000000000000000000000000000000000000000000003f2020152c7c42"
+    },
+    {
+      "symbol": "ADA",
+      "contract": "0x3ee2200efb3400fabb9aacf31297cbdd1d435d47",
+      "decimals": 18,
+      "balance": 12.303437881985097,
+      "balance_raw": "0x000000000000000000000000000000000000000000000000aabe979137ce5c06"
+    },
+    {
+      "symbol": "BTT",
+      "contract": "0x352cb5e19b12fc216548a2677bd0fce83bae434b",
+      "decimals": 18,
+      "balance": 8933865.819518946,
+      "balance_raw": "0x0000000000000000000000000000000000000000000763d1d62592bd88f93865"
+    },
+    {
+      "symbol": "GMT",
+      "contract": "0x7ddc52c4de30e94be3a6a0a2b259b2850f421989",
+      "decimals": 18,
+      "balance": 6.682079243048228,
+      "balance_raw": "0x0000000000000000000000000000000000000000000000005cbb83ab1ae6929b"
+    },
+    {
+      "symbol": "RIO",
+      "contract": "0xf9cec8d50f6c8ad3fb6dccec577e05aa32b224fe",
+      "decimals": 18,
+      "balance": 0.0,
+      "balance_raw": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "symbol": "USDC",
+      "contract": "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d",
+      "decimals": 18,
+      "balance": 1.5006451139656127,
+      "balance_raw": "0x00000000000000000000000000000000000000000000000014d35cc7c7d88eea"
+    },
+    {
+      "symbol": "BCH",
+      "contract": "0x8ff795a6f4d97e7887c79bea79aba5cc76444adf",
+      "decimals": 18,
+      "balance": 0.003356630094399976,
+      "balance_raw": "0x000000000000000000000000000000000000000000000000000becd6586b49e8"
+    },
+    {
+      "symbol": "CAKE",
+      "contract": "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82",
+      "decimals": 18,
+      "balance": 0.9729935123725935,
+      "balance_raw": "0x0000000000000000000000000000000000000000000000000d80c471c1ba62fe"
+    },
+    {
+      "symbol": "TWT",
+      "contract": "0x4b0f1812e5df2a09796481ff14017e6005508003",
+      "decimals": 18,
+      "balance": 41.08366630301344,
+      "balance_raw": "0x0000000000000000000000000000000000000000000000023a2680d4fdcd4be0"
+    },
+    {
+      "symbol": "FIL",
+      "contract": "0x0d8ce2a99bb6e3b7db580ed848240e4a0f9ae153",
+      "decimals": 18,
+      "balance": 1.4276947473043486,
+      "balance_raw": "0x00000000000000000000000000000000000000000000000013d030cef4c44c31"
+    },
+    {
+      "symbol": "LINK",
+      "contract": "0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd",
+      "decimals": 18,
+      "balance": 0.1087957223722882,
+      "balance_raw": "0x0000000000000000000000000000000000000000000000000182852211150ec1"
+    },
+    {
+      "symbol": "XRP",
+      "contract": "0x1d2f0da169ceb9fc7b3144628db156f3f6c60dbe",
+      "decimals": 18,
+      "balance": 0.7092931900542975,
+      "balance_raw": "0x00000000000000000000000000000000000000000000000009d7ea65faca3f4e"
+    },
+    {
+      "symbol": "DOGE",
+      "contract": "0xba2ae424d960c26247dd6c32edc70b295c744c43",
+      "decimals": 8,
+      "balance": 5.59406212,
+      "balance_raw": "0x000000000000000000000000000000000000000000000000000000002157dc84"
+    },
+    {
+      "symbol": "LTC",
+      "contract": "0x4338665cbb7b2485a8855a139b75d5e34ab0db94",
+      "decimals": 18,
+      "balance": 0.1076833589709464,
+      "balance_raw": "0x000000000000000000000000000000000000000000000000017e9171c7af235f"
+    },
+    {
+      "symbol": "LAWAS",
+      "contract": "0xc6e6b78a08613768572255bc859204542346b879",
+      "decimals": 18,
+      "balance": 553989.7954396121,
+      "balance_raw": "0x00000000000000000000000000000000000000000000754fd8d42c9874f5ade4"
+    }
+  ],
+  "note_pending": [
+    "XPL",
+    "AXL",
+    "MGC",
+    "AI",
+    "RIO"
+  ]
+}

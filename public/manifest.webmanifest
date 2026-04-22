@@ -1,9 +1,9 @@
 {
-  "name": "OKX Agentic Bot",
-  "short_name": "OKX Bot",
-  "start_url": "/",
+  "name": "LAWAS Portfolio",
+  "short_name": "LAWAS",
+  "start_url": "/portfolio",
   "display": "standalone",
-  "background_color": "#0c1a2b",
-  "theme_color": "#0c1a2b",
+  "background_color": "#08111f",
+  "theme_color": "#08111f",
   "icons": []
 }

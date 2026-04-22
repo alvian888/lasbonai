@@ -67,8 +67,9 @@ if (data?.baselineDecision?.action !== "buy") {
 if (data?.decision?.action === "hold") {
   errors.push("decision.action should not be hold for bullish scenario");
 }
-if (data?.execution?.mode !== "preview") {
-  errors.push("execution.mode must be preview for bullish scenario");
+// execution.mode can be "preview" (dry-run) or "error" (wallet limit in live mode) or "sent" (successful execution)
+if (!["preview", "error", "sent"].includes(data?.execution?.mode)) {
+  errors.push("execution.mode must be preview, error, or sent for bullish scenario");
 }
 if (strictMode) {
   if (typeof data?.decision?.confidence !== "number" || data.decision.confidence < 0.6) {

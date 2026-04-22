@@ -1,0 +1,52 @@
+{
+  "symbol": "TWT",
+  "name": "Trust Wallet Token",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x4B0F1812e5Df2A09796481Ff14017e6005508003",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-19T02:22:26.658Z",
+  "timestampUnix": 1776565341659,
+  "price": {
+    "usd": 0.40690848730400203,
+    "idr": 6836.062586707234
+  },
+  "change": {
+    "1h": 0.16,
+    "4h": -0.95,
+    "24h": -4.55
+  },
+  "range24h": {
+    "high": 0.43537207611247747,
+    "low": 0.4050125581883586
+  },
+  "market": {
+    "volume24h_usd": 154719.5268320397,
+    "volume24h_idr": 2599288050.778267,
+    "liquidity_usd": 1462500.6312528767,
+    "liquidity_idr": 24570010605.04833,
+    "txs24h": 2149
+  },
+  "portfolio": {
+    "holdings": 2.372,
+    "entryPrice": 0.423,
+    "entryCost_usd": 1,
+    "entryCost_idr": 16800,
+    "currentValue_usd": 0.9651869318850927,
+    "currentValue_idr": 16215.140455669558,
+    "pnl_usd": -0.03481306811490725,
+    "pnl_idr": -584.8595443304418,
+    "pnl_pct": -3.8
+  },
+  "zones": {
+    "buyZone": 0.4019,
+    "sellTarget1": 0.4865,
+    "sellTarget2": 0.5288,
+    "sellTarget3": 0.5922,
+    "stopLoss": 0.3892,
+    "trailingStop": 0.39762,
+    "trailingStopPct": 6
+  },
+  "signal": "HOLD"
+}

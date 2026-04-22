@@ -27,9 +27,39 @@ upsert_env() {
   mv "$tmp" "$ENV_FILE"
 }
 
+has_env_key() {
+  local key="$1"
+  grep -q "^${key}=" "$ENV_FILE"
+}
+
+http_status() {
+  local url="$1"
+  local token="${2:-}"
+  local auth_args=()
+
+  if [[ -n "$token" ]]; then
+    auth_args=(-H "Authorization: Bearer $token")
+  fi
+
+  curl -sS -m 3 -o /dev/null -w "%{http_code}" "${auth_args[@]}" "$url" || true
+}
+
 can_reach() {
   local url="$1"
-  curl -sS -m 3 "$url" >/dev/null 2>&1
+  local token="${2:-}"
+  local status
+
+  status="$(http_status "$url" "$token")"
+  [[ "$status" == "200" || "$status" == "401" ]]
+}
+
+endpoint_works() {
+  local url="$1"
+  local token="${2:-}"
+  local status
+
+  status="$(http_status "$url" "$token")"
+  [[ "$status" == "200" ]]
 }
 
 try_start_stack() {
@@ -66,29 +96,56 @@ if [[ ! -f "$ENV_FILE" ]]; then
   echo "[integrate] .env created from .env.example"
 fi
 
+OPENCLAW_GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-}"
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+  token_line="$(grep -m1 '^OPENCLAW_GATEWAY_TOKEN=' "$PROJECT_DIR/.env" || true)"
+  if [[ -n "$token_line" ]]; then
+    OPENCLAW_GATEWAY_TOKEN="${token_line#OPENCLAW_GATEWAY_TOKEN=}"
+  fi
+fi
+
 MODEL_ENDPOINT=""
 DEFAULT_MODEL=""
 
-if can_reach "http://127.0.0.1:3001/v1/models"; then
+if endpoint_works "http://127.0.0.1:3001/v1/models" "$OPENCLAW_GATEWAY_TOKEN"; then
   MODEL_ENDPOINT="http://127.0.0.1:3001/v1"
   DEFAULT_MODEL="openclaw/default"
-  echo "[integrate] detected OpenClaw gateway on :3001"
-elif can_reach "http://127.0.0.1:11435/v1/models"; then
+  if [[ -n "$OPENCLAW_GATEWAY_TOKEN" ]]; then
+    echo "[integrate] detected OpenClaw gateway on :3001 with auth token"
+  else
+    echo "[integrate] detected OpenClaw gateway on :3001"
+  fi
+  echo "[integrate] selected local model: openclaw/default"
+elif endpoint_works "http://127.0.0.1:11435/v1/models"; then
   MODEL_ENDPOINT="http://127.0.0.1:11435/v1"
-  DEFAULT_MODEL="rahmatginanjar120/lasbonai:latest"
+  DEFAULT_MODEL="lasbonai-trading"
   echo "[integrate] detected Ollama gateway on :11435"
+  if curl -sS "http://127.0.0.1:11435/v1/models" | grep -q 'lasbonai-trading'; then
+    DEFAULT_MODEL="lasbonai-trading"
+    echo "[integrate] selected local model: lasbonai-trading"
+  elif curl -sS "http://127.0.0.1:11435/v1/models" | grep -q 'rahmatginanjar120/lasbonai:latest'; then
+    DEFAULT_MODEL="rahmatginanjar120/lasbonai:latest"
+    echo "[integrate] selected fallback local model: rahmatginanjar120/lasbonai:latest"
+  fi
 else
   echo "[integrate] no local AI endpoint found on :3001 or :11435"
   try_start_stack
 
-  if can_reach "http://127.0.0.1:3001/v1/models"; then
+  if endpoint_works "http://127.0.0.1:3001/v1/models" "$OPENCLAW_GATEWAY_TOKEN"; then
     MODEL_ENDPOINT="http://127.0.0.1:3001/v1"
     DEFAULT_MODEL="openclaw/default"
     echo "[integrate] detected OpenClaw gateway on :3001 after docker startup"
-  elif can_reach "http://127.0.0.1:11435/v1/models"; then
+  elif endpoint_works "http://127.0.0.1:11435/v1/models"; then
     MODEL_ENDPOINT="http://127.0.0.1:11435/v1"
-    DEFAULT_MODEL="rahmatginanjar120/lasbonai:latest"
+    DEFAULT_MODEL="lasbonai-trading"
     echo "[integrate] detected Ollama gateway on :11435 after docker startup"
+    if curl -sS "http://127.0.0.1:11435/v1/models" | grep -q 'lasbonai-trading'; then
+      DEFAULT_MODEL="lasbonai-trading"
+      echo "[integrate] selected local model: lasbonai-trading"
+    elif curl -sS "http://127.0.0.1:11435/v1/models" | grep -q 'rahmatginanjar120/lasbonai:latest'; then
+      DEFAULT_MODEL="rahmatginanjar120/lasbonai:latest"
+      echo "[integrate] selected fallback local model: rahmatginanjar120/lasbonai:latest"
+    fi
   else
     echo "[integrate] start your docker stack first, then rerun this script"
     echo "[integrate] suggested command (from workspace root): docker compose --env-file .env up -d"
@@ -98,9 +155,19 @@ fi
 
 upsert_env "OPENAI_BASE_URL" "$MODEL_ENDPOINT"
 upsert_env "OPENAI_MODEL" "$DEFAULT_MODEL"
-upsert_env "OPENAI_API_KEY" "ollama"
-upsert_env "LIVE_STAGE" "dry-run"
-upsert_env "DRY_RUN" "true"
+if [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" && "$MODEL_ENDPOINT" == "http://127.0.0.1:3001/v1" ]]; then
+  upsert_env "OPENAI_API_KEY" "$OPENCLAW_GATEWAY_TOKEN"
+else
+  upsert_env "OPENAI_API_KEY" "ollama"
+fi
+
+# Preserve explicit runtime mode if user has already set it.
+if ! has_env_key "LIVE_STAGE"; then
+  upsert_env "LIVE_STAGE" "dry-run"
+fi
+if ! has_env_key "DRY_RUN"; then
+  upsert_env "DRY_RUN" "true"
+fi
 
 echo "[integrate] .env updated"
 

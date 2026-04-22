@@ -1,0 +1,109 @@
+{
+  "comparedAt": "2026-04-22T08:27:52.699Z",
+  "channels": [
+    {
+      "channel": "kaptencrypto707",
+      "channelUrl": "https://t.me/kaptencrypto707",
+      "messageCount": 20,
+      "scrapedAt": "2026-04-22T08:27:43.838Z",
+      "sentimentScore": 85,
+      "overallSentiment": "positive",
+      "mentionedTokens": [
+        {
+          "symbol": "BTC",
+          "sentiment": "positive",
+          "confidence": 0.9
+        },
+        {
+          "symbol": "ETH",
+          "sentiment": "neutral",
+          "confidence": 0
+        }
+      ],
+      "topBullishSignals": [
+        "Bitcoin already broke through resistance at 80k",
+        "Analyst predicts Bitcoin will reach 85k",
+        "Many users are using bot grid trading to profit from the hype"
+      ],
+      "topBearishSignals": [],
+      "reasoning": "Strong bullish consensus from the messages, with many users expressing optimism about Bitcoin's price movement."
+    },
+    {
+      "channel": "cryptoanalyst_ff",
+      "channelUrl": "https://t.me/cryptoanalyst_ff",
+      "messageCount": 17,
+      "scrapedAt": "2026-04-22T08:27:43.800Z",
+      "sentimentScore": 82,
+      "overallSentiment": "positive",
+      "mentionedTokens": [
+        {
+          "symbol": "#BTC",
+          "sentiment": "positive",
+          "confidence": 0.9
+        },
+        {
+          "symbol": "#KIN",
+          "sentiment": "positive",
+          "confidence": 0.8
+        },
+        {
+          "symbol": "#BSB",
+          "sentiment": "positive",
+          "confidence": 0.7
+        },
+        {
+          "symbol": "#MANTRA",
+          "sentiment": "positive",
+          "confidence": 0.6
+        }
+      ],
+      "topBullishSignals": [
+        "ETH | LONG",
+        "LINK | LONG",
+        "#KIN Long dari harga sekrng 0.02989 atau di bawahnya",
+        "#BSB Long di harga sekarang 0.1181 atau di bawahnya"
+      ],
+      "topBearishSignals": [],
+      "reasoning": "Strong bullish sentiment from token mentions and buy/sell signals, with a slight mention of short selling."
+    },
+    {
+      "channel": "dutacryptosignal",
+      "channelUrl": "https://t.me/dutacryptosignal",
+      "messageCount": 20,
+      "scrapedAt": "2026-04-22T08:27:43.984Z",
+      "sentimentScore": 85,
+      "overallSentiment": "positive",
+      "mentionedTokens": [
+        {
+          "symbol": "BTC",
+          "sentiment": "positive",
+          "confidence": 0.9
+        },
+        {
+          "symbol": "ETH",
+          "sentiment": "neutral",
+          "confidence": 0.5
+        },
+        {
+          "symbol": "USDC",
+          "sentiment": "neutral",
+          "confidence": 0.8
+        }
+      ],
+      "topBullishSignals": [
+        "Michael Saylor's 'Strategy' melalukan akumulasi 34,164 Bitcoin",
+        "Circle kembali menerbitkan (minted) tambahan sebesar &#036;300M USDC di jaringan Solana"
+      ],
+      "topBearishSignals": [],
+      "reasoning": "Strong bullish sentiment from Michael Saylor's 'Strategy' and significant updates on Bitcoin ETFs, stablecoins, and institutional investments."
+    }
+  ],
+  "combinedScore": 84,
+  "combinedSentiment": "positive",
+  "agreement": "strong",
+  "commonBullishTokens": [
+    "BTC"
+  ],
+  "commonBearishTokens": [],
+  "tradeDecision": "Auto-buy: multi-channel consensus on BTC"
+}

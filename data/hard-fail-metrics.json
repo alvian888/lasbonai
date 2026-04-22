@@ -1,0 +1,135 @@
+{
+  "exportedAt": "2026-04-22T08:25:32.114Z",
+  "cycle": 115,
+  "hardFailMetrics": {},
+  "blacklistedTokens": [],
+  "blacklistThreshold": 5,
+  "tokenHealth": {
+    "AXL": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "DOGE": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "TKO": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "XPL": {
+      "score": 0,
+      "riskLevel": "🔴 high-risk",
+      "successRate": "0.0",
+      "multiplier": "0.30"
+    },
+    "FIL": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "XRP": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "ADA": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "CAKE": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "GMT": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "TWT": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "LTC": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "BNB": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "WBNB": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "BCH": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "ETH": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "LAWAS": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "SAPI": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "BTT": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "AI": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "RIO": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    },
+    "LINK": {
+      "score": 100,
+      "riskLevel": "🟢 stable",
+      "successRate": "N/A",
+      "multiplier": "1.00"
+    }
+  }
+}

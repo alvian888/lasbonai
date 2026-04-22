@@ -1,0 +1,52 @@
+{
+  "symbol": "CAKE",
+  "name": "PancakeSwap Token",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-20T02:59:39.712Z",
+  "timestampUnix": 1776653973915,
+  "price": {
+    "usd": 1.5133984441498483,
+    "idr": 25425.09386171745
+  },
+  "change": {
+    "1h": -0.21,
+    "4h": -0.01,
+    "24h": -1.9
+  },
+  "range24h": {
+    "high": 1.6195290693837856,
+    "low": 1.4872923955355486
+  },
+  "market": {
+    "volume24h_usd": 3601287.5204064203,
+    "volume24h_idr": 60501630342.82786,
+    "liquidity_usd": 34772671.48053939,
+    "liquidity_idr": 584180880873.0618,
+    "txs24h": 23838
+  },
+  "portfolio": {
+    "holdings": 0.641,
+    "entryPrice": 1.56,
+    "entryCost_usd": 1,
+    "entryCost_idr": 16800,
+    "currentValue_usd": 0.9700884027000527,
+    "currentValue_idr": 16297.485165360886,
+    "pnl_usd": -0.0299115972999473,
+    "pnl_idr": -502.51483463911467,
+    "pnl_pct": -2.99
+  },
+  "zones": {
+    "buyZone": 1.482,
+    "sellTarget1": 1.794,
+    "sellTarget2": 1.95,
+    "sellTarget3": 2.184,
+    "stopLoss": 1.435,
+    "trailingStop": 1.4664,
+    "trailingStopPct": 6
+  },
+  "signal": "HOLD"
+}

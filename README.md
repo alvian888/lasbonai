@@ -83,6 +83,12 @@ API aktif di `http://127.0.0.1:8787`.
 
 Saat server hidup, scheduler juga bisa berjalan otomatis setiap 5 menit bila `SCHEDULE_ENABLED=true`.
 
+Untuk menjaga proses bot tetap restart setelah 2 jam jika berjalan terlalu lama, gunakan:
+
+```bash
+npm run watchdog:dev
+```
+
 ## Integrasi Dengan AI Agent Docker Lokal
 
 Jika Anda sudah punya stack lokal (`openclaw` / `ollama`) di Docker, jalankan integrasi otomatis:

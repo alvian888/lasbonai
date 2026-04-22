@@ -1,0 +1,52 @@
+{
+  "symbol": "BCH",
+  "name": "Binance-Peg Bitcoin Cash",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x8fF795a6F4D97E7887C79beA79aba5cc76444aDf",
+  "decimals": 18,
+  "category": "hold",
+  "timestamp": "2026-04-19T02:19:26.488Z",
+  "timestampUnix": 1776565163203,
+  "price": {
+    "usd": 443.0641944497461,
+    "idr": 7443478.466755734
+  },
+  "change": {
+    "1h": -0.61,
+    "4h": -0.16,
+    "24h": -2.59
+  },
+  "range24h": {
+    "high": 460.11798283007874,
+    "low": 441.896082639297
+  },
+  "market": {
+    "volume24h_usd": 8324.609714272032,
+    "volume24h_idr": 139853443.19977012,
+    "liquidity_usd": 153544.64423346,
+    "liquidity_idr": 2579550023.122128,
+    "txs24h": 279
+  },
+  "portfolio": {
+    "holdings": 0.002214,
+    "entryPrice": 449.23,
+    "entryCost_usd": 1,
+    "entryCost_idr": 16800,
+    "currentValue_usd": 0.9809441265117378,
+    "currentValue_idr": 16479.861325397196,
+    "pnl_usd": -0.01905587348826221,
+    "pnl_idr": -320.1386746028051,
+    "pnl_pct": -1.37
+  },
+  "zones": {
+    "buyZone": 426.77,
+    "sellTarget1": 516.61,
+    "sellTarget2": 561.54,
+    "sellTarget3": 629,
+    "stopLoss": 413.29,
+    "trailingStop": 422.2762,
+    "trailingStopPct": 6
+  },
+  "signal": "HOLD"
+}

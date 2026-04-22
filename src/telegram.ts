@@ -31,6 +31,13 @@ export function formatTelegramMessage(result: BotRunResult) {
 
   if (result.execution?.txHash) {
     lines.push(`Tx: ${result.execution.txHash}`);
+    if (result.execution.receiptStatus) {
+      const extra = [
+        result.execution.receiptBlockNumber !== undefined ? `block=${result.execution.receiptBlockNumber}` : undefined,
+        result.execution.receiptGasUsed ? `gas=${result.execution.receiptGasUsed}` : undefined
+      ].filter(Boolean);
+      lines.push(`Receipt: ${result.execution.receiptStatus}${extra.length ? ` (${extra.join(", ")})` : ""}`);
+    }
   }
 
   return lines.join("\n");

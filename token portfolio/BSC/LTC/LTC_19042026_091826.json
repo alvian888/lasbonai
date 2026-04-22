@@ -1,0 +1,52 @@
+{
+  "symbol": "LTC",
+  "name": "Litecoin",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x4338665CBB7B2485A8855A139b75D5e34AB0DB94",
+  "decimals": 18,
+  "category": "hold",
+  "timestamp": "2026-04-19T02:18:26.444Z",
+  "timestampUnix": 1776565101960,
+  "price": {
+    "usd": 55.39975444835394,
+    "idr": 930715.8747323462
+  },
+  "change": {
+    "1h": -0.16,
+    "4h": -0.2,
+    "24h": -2.16
+  },
+  "range24h": {
+    "high": 56.700218105061815,
+    "low": 55.05288431787192
+  },
+  "market": {
+    "volume24h_usd": 32136.787298984615,
+    "volume24h_idr": 539898026.6229415,
+    "liquidity_usd": 573621.9262195803,
+    "liquidity_idr": 9636848360.48895,
+    "txs24h": 932
+  },
+  "portfolio": {
+    "holdings": 0.0894,
+    "entryPrice": 56.29,
+    "entryCost_usd": 5.07,
+    "entryCost_idr": 85176,
+    "currentValue_usd": 4.952738047682842,
+    "currentValue_idr": 83205.99920107174,
+    "pnl_usd": -0.11726195231715852,
+    "pnl_idr": -1970.0007989282633,
+    "pnl_pct": -1.58
+  },
+  "zones": {
+    "buyZone": 53.48,
+    "sellTarget1": 64.73,
+    "sellTarget2": 70.36,
+    "sellTarget3": 78.81,
+    "stopLoss": 51.79,
+    "trailingStop": 55.29159474160857,
+    "trailingStopPct": 6
+  },
+  "signal": "HOLD"
+}

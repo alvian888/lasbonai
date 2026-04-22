@@ -1,0 +1,19 @@
+[Unit]
+Description=OKX Agentic Trading Bot
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+EnvironmentFile=__PROJECT_DIR__/.env
+ExecStart=/usr/bin/env bash -lc 'npm run dev'
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:__PROJECT_DIR__/data/logs/production.log
+StandardError=append:__PROJECT_DIR__/data/logs/production-error.log
+
+[Install]
+WantedBy=default.target

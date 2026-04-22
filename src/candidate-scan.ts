@@ -66,6 +66,9 @@ interface DexScreenerResponse {
   pairs?: DexScreenerPair[];
 }
 
+const FETCH_TIMEOUT_MS = 10_000;
+const COINGECKO_CONCURRENCY = 4;
+
 function asNumber(value: string | number | null | undefined) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
@@ -79,77 +82,86 @@ async function delay(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs = FETCH_TIMEOUT_MS): Promise<T | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      return null;
+    }
+    return (await response.json().catch(() => null)) as T | null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchUsdToIdrRate() {
   if (config.CANDIDATE_FX_USD_TO_IDR > 0) {
     return config.CANDIDATE_FX_USD_TO_IDR;
   }
 
-  try {
-    const response = await fetch("https://open.er-api.com/v6/latest/USD");
-    const payload = (await response.json().catch(() => null)) as { rates?: { IDR?: number } } | null;
-    const rate = payload?.rates?.IDR;
-    if (rate && Number.isFinite(rate)) {
-      return rate;
-    }
-  } catch {
-    // ignore and use fallback below
+  const payload = await fetchJsonWithTimeout<{ rates?: { IDR?: number } }>("https://open.er-api.com/v6/latest/USD");
+  const rate = payload?.rates?.IDR;
+  if (rate && Number.isFinite(rate)) {
+    return rate;
   }
 
   return 17000;
 }
 
 async function fetchCoinGeckoContract(address: string): Promise<CoinGeckoContractResponse | null> {
-  try {
-    const response = await fetch(`https://api.coingecko.com/api/v3/coins/binance-smart-chain/contract/${address}`);
-    if (!response.ok) {
-      return null;
-    }
-
-    return (await response.json().catch(() => null)) as CoinGeckoContractResponse | null;
-  } catch {
-    return null;
-  }
+  return fetchJsonWithTimeout<CoinGeckoContractResponse>(
+    `https://api.coingecko.com/api/v3/coins/binance-smart-chain/contract/${address}`
+  );
 }
 
+const DEXSCREENER_CONCURRENCY = 4;
+
 async function fetchAllowlistDexCandidates(allowlist: Set<string>, limit: number): Promise<CandidateToken[]> {
-  const items: CandidateToken[] = [];
+  const addresses = Array.from(allowlist);
+  const items: (CandidateToken | null)[] = new Array(addresses.length).fill(null);
+  let nextIndex = 0;
 
-  for (const address of allowlist) {
-    try {
-      const response = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
-      if (!response.ok) {
-        continue;
+  async function runWorker() {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= addresses.length) return;
+      const address = addresses[i];
+      try {
+        const payload = await fetchJsonWithTimeout<DexScreenerResponse>(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
+        const bscPairs = (payload?.pairs ?? []).filter((pair) => pair.chainId === "bsc");
+        if (bscPairs.length === 0) continue;
+
+        const best = bscPairs.sort((left, right) => asNumber(right.liquidity?.usd) - asNumber(left.liquidity?.usd))[0];
+        const marketCap = asNumber(best.marketCap);
+        const fdv = asNumber(best.fdv);
+        const resolvedMarketCap = marketCap > 0 ? marketCap : fdv;
+
+        items[i] = {
+          rank: 0,
+          symbol: String(best.baseToken?.symbol ?? ""),
+          address,
+          priceUsd: asNumber(best.priceUsd),
+          holders: 0,
+          liquidityUsd: asNumber(best.liquidity?.usd),
+          marketCapUsdOkx: resolvedMarketCap,
+          fdvUsdCoinGecko: null,
+          marketCapUsdCoinGecko: null,
+          symbolCoinGecko: null
+        };
+      } catch {
+        // skip token and continue
       }
-
-      const payload = (await response.json().catch(() => null)) as DexScreenerResponse | null;
-      const bscPairs = (payload?.pairs ?? []).filter((pair) => pair.chainId === "bsc");
-      if (bscPairs.length === 0) {
-        continue;
-      }
-
-      const best = bscPairs.sort((left, right) => asNumber(right.liquidity?.usd) - asNumber(left.liquidity?.usd))[0];
-      const marketCap = asNumber(best.marketCap);
-      const fdv = asNumber(best.fdv);
-      const resolvedMarketCap = marketCap > 0 ? marketCap : fdv;
-
-      items.push({
-        rank: 0,
-        symbol: String(best.baseToken?.symbol ?? ""),
-        address,
-        priceUsd: asNumber(best.priceUsd),
-        holders: 0,
-        liquidityUsd: asNumber(best.liquidity?.usd),
-        marketCapUsdOkx: resolvedMarketCap,
-        fdvUsdCoinGecko: null,
-        marketCapUsdCoinGecko: null,
-        symbolCoinGecko: null
-      });
-    } catch {
-      // skip token and continue
     }
   }
 
-  return items
+  const workerCount = Math.min(DEXSCREENER_CONCURRENCY, addresses.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+  return (items.filter(Boolean) as CandidateToken[])
     .sort((left, right) => left.priceUsd - right.priceUsd)
     .slice(0, limit)
     .map((token, index) => ({
@@ -307,30 +319,43 @@ export async function scanBep20Candidates(): Promise<CandidateScanResult> {
 
   const base = (useFallbackTop ? sorted : allowlistFiltered).slice(0, config.CANDIDATE_LIMIT);
 
-  const tokens: CandidateToken[] = [];
-  for (const [index, token] of base.entries()) {
-    const address = String(token.tokenContractAddress ?? "").toLowerCase();
-    const coinGecko = address ? await fetchCoinGeckoContract(address) : null;
-    const fdvCoinGecko = coinGecko?.market_data?.fully_diluted_valuation?.usd ?? null;
-    const marketCapCoinGecko = coinGecko?.market_data?.market_cap?.usd ?? null;
+  console.log(`[candidate-scan] enriching ${base.length} token(s) with CoinGecko (concurrency=${COINGECKO_CONCURRENCY})`);
 
-    if (config.CANDIDATE_REQUIRE_EXPLICIT_FDV && (fdvCoinGecko === null || fdvCoinGecko < fdvMinUsd)) {
-      continue;
+  // Worker pool: keep COINGECKO_CONCURRENCY workers busy at all times (no idle gaps between batches)
+  const enriched: (CandidateToken | null)[] = new Array(base.length).fill(null);
+  let nextCoinGeckoIndex = 0;
+
+  async function runCoinGeckoWorker() {
+    while (true) {
+      const index = nextCoinGeckoIndex++;
+      if (index >= base.length) return;
+      const token = base[index];
+      const address = String(token.tokenContractAddress ?? "").toLowerCase();
+      const coinGecko = address ? await fetchCoinGeckoContract(address) : null;
+      const fdvCoinGecko = coinGecko?.market_data?.fully_diluted_valuation?.usd ?? null;
+      const marketCapCoinGecko = coinGecko?.market_data?.market_cap?.usd ?? null;
+
+      if (config.CANDIDATE_REQUIRE_EXPLICIT_FDV && (fdvCoinGecko === null || fdvCoinGecko < fdvMinUsd)) {
+        continue;
+      }
+
+      enriched[index] = {
+        rank: index + 1,
+        symbol: String(token.tokenSymbol ?? ""),
+        address,
+        priceUsd: asNumber(token.price),
+        holders: asNumber(token.holders),
+        liquidityUsd: asNumber(token.liquidity),
+        marketCapUsdOkx: asNumber(token.marketCap),
+        fdvUsdCoinGecko: fdvCoinGecko,
+        marketCapUsdCoinGecko: marketCapCoinGecko,
+        symbolCoinGecko: coinGecko?.symbol ?? null
+      } satisfies CandidateToken;
     }
-
-    tokens.push({
-      rank: index + 1,
-      symbol: String(token.tokenSymbol ?? ""),
-      address,
-      priceUsd: asNumber(token.price),
-      holders: asNumber(token.holders),
-      liquidityUsd: asNumber(token.liquidity),
-      marketCapUsdOkx: asNumber(token.marketCap),
-      fdvUsdCoinGecko: fdvCoinGecko,
-      marketCapUsdCoinGecko: marketCapCoinGecko,
-      symbolCoinGecko: coinGecko?.symbol ?? null
-    });
   }
+
+  await Promise.all(Array.from({ length: Math.min(COINGECKO_CONCURRENCY, base.length) }, () => runCoinGeckoWorker()));
+  const tokens = (enriched.filter(Boolean) as CandidateToken[]).map((t, i) => ({ ...t, rank: i + 1 }));
 
   if (tokens.length === 0) {
     const historyFallback = await loadLastKnownNonEmpty(config.CANDIDATE_LIMIT);

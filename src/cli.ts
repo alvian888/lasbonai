@@ -1,3 +1,4 @@
+import "./initialize.js";
 import { config } from "./config.js";
 import { AgenticTradingBot } from "./bot.js";
 
@@ -30,8 +31,21 @@ async function main() {
     buyAmount: config.DEFAULT_BUY_AMOUNT,
     sellAmount: config.DEFAULT_SELL_AMOUNT,
     slippage: config.DEFAULT_SLIPPAGE,
-    marketContext: getArgValue("--market-context")
+    marketContext: getArgValue("--market-context"),
+    rsi: getArgValue("--rsi") ? Number(getArgValue("--rsi")) : undefined,
+    macd: getArgValue("--macd") ? Number(getArgValue("--macd")) : undefined,
+    macdSignal: getArgValue("--macd-signal") ? Number(getArgValue("--macd-signal")) : undefined,
+    emaFast: getArgValue("--ema-fast") ? Number(getArgValue("--ema-fast")) : undefined,
+    emaSlow: getArgValue("--ema-slow") ? Number(getArgValue("--ema-slow")) : undefined
   });
+
+  const preferredAmount = result.decision.preferredAmount ? ` preferredAmount=${result.decision.preferredAmount}` : "";
+  console.error(
+    `[cli] decision=${result.decision.action} conf=${result.decision.confidence.toFixed(2)} source=${result.decisionSource ?? "unknown"}${preferredAmount}`
+  );
+  if (result.decision.riskNotes?.length) {
+    console.error(`[cli] riskNotes=${result.decision.riskNotes.join("; ")}`);
+  }
 
   console.log(JSON.stringify(result, jsonReplacer, 2));
 }
