@@ -1,0 +1,16 @@
+[Unit]
+Description=OKX Agentic Bot NOC Probe Runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=__PROJECT_DIR__
+Environment=NOC_RETENTION_DAYS=7
+Environment=NOC_RETENTION_MAX_FILES=2016
+Environment=NOC_ALERT_SILENCE_HOURS=03-08
+Environment=NOC_ALERT_ALWAYS_FOR=FAIL
+ExecStart=/usr/bin/env bash -lc 'npm run noc:probe:run >> data/logs/noc-runner.log 2>&1'
+
+[Install]
+WantedBy=default.target
