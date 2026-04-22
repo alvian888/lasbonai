@@ -25,7 +25,7 @@ export type SentimentResult = z.infer<typeof sentimentResultSchema>;
 
 // Use Ollama directly for sentiment (avoids auth proxy on port 3001)
 const OLLAMA_URL = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11435/v1";
-const OLLAMA_MODEL = process.env.SENTIMENT_MODEL || "rahmatginanjar120/lasbonai:latest";
+const OLLAMA_MODEL = process.env.SENTIMENT_MODEL || "lasbonai-trading";
 const client = new OpenAI({
   apiKey: "ollama",
   baseURL: OLLAMA_URL
@@ -107,7 +107,8 @@ ${digest}`;
     if (parsed.overallSentiment) parsed.overallSentiment = normSentiment(parsed.overallSentiment);
     if (Array.isArray(parsed.mentionedTokens)) {
       for (const t of parsed.mentionedTokens) {
-        if (t.sentiment) t.sentiment = normSentiment(t.sentiment);
+        // Always normalize sentiment — handles null, undefined, empty string, or non-enum values from LLM
+        t.sentiment = t.sentiment ? normSentiment(t.sentiment) : "neutral";
         if (t.confidence == null) {
           // Default confidence based on resolved sentiment
           t.confidence = t.sentiment === "positive" ? 0.7 : 0.4;

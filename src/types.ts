@@ -14,6 +14,7 @@ export interface TradingRequest {
   macdSignal?: number;
   emaFast?: number;
   emaSlow?: number;
+  sentimentProbe?: boolean;
 }
 
 export interface QuoteSummary {
@@ -63,8 +64,12 @@ export interface BotRunResult {
   decisionSource?: "baseline" | "ai";
   executionProvider?: ExecutionProviderName;
   execution?: {
-    mode: "preview" | "sent";
+    mode: "preview" | "sent" | "error";
     txHash?: string;
+    error?: string;
+    receiptStatus?: "success" | "failed" | "pending" | "unavailable";
+    receiptBlockNumber?: number;
+    receiptGasUsed?: string;
     transaction?: Omit<SwapBuildResult, "raw">;
   };
 }

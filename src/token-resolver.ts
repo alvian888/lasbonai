@@ -23,6 +23,8 @@ const WELL_KNOWN_BSC: Record<string, string> = {
   matic: "0xcc42724c6683b7e57334c4e856f4c9965ed682bd",
   link: "0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd",
   avax: "0x1ce0c2827e2ef14d5c4f29a091d735a204794041",
+  uni: "0xbf5140a22578168fd562dccf235e5d43a02ce9b1",
+  idrx: "0x649a2da7b28e0d54c13d5eff95d3a660652742cc",
 };
 
 /**

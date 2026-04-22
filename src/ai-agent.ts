@@ -83,22 +83,28 @@ export class AiTradeAgent {
         {
           role: "system",
           content:
-            "You are a crypto execution agent. Reply with strict JSON only: {\"action\":\"buy\"|\"sell\"|\"hold\", \"confidence\":0.0-1.0, \"reasoning\":\"...\", \"riskNotes\":[]}. Be balanced: buy when price is attractive and position is small relative to max, sell only when clearly in profit above take-profit target or risk is elevated, hold when uncertain. Do NOT default to selling."
+            "You are a risk-aware crypto execution agent. Respond with strict JSON only: {\"action\":\"buy\"|\"sell\"|\"hold\", \"confidence\":0.0-1.0, \"reasoning\":\"...\", \"riskNotes\":[], \"preferredAmount\":\"atomic amount string\"}.\n\nUse the provided market quotes, position context, and risk limits. Prioritize low slippage, low price impact, and risk-calibrated position sizing. Recognize strong market context cues (e.g., \"Bullish breakout\", \"accumulation\") and act on them with confidence >= 0.7 when quote quality is acceptable. Only recommend execution when the trade has a clear edge and the confidence level justifies live execution. If you are uncertain, return hold with low confidence."
         },
         {
           role: "user",
           content: JSON.stringify(
             {
-              task: "Decide the best next trade action.",
+              task: "Decide the best next trade action for the requested market scan.",
+              guidance: {
+                target: "Maximize weekly P&L with risk-calibrated execution. Prefer acting on high-quality edges over passive holding.",
+                avoid: ["high slippage", "low liquidity", "weak signals", "selling into a loss unless stop-loss conditions are met"],
+                preferredAmountUnits: "same atomic units as request.buyAmount and request.sellAmount"
+              },
               guardrails: {
                 allowedActions: ["buy", "sell", "hold"],
                 maxConfidenceToExecute: config.MAX_CONFIDENCE_TO_EXECUTE,
-                dryRun: config.DRY_RUN
+                dryRun: config.DRY_RUN,
+                defaultSlippagePercent: config.DEFAULT_SLIPPAGE
               },
               request: params.request,
               buyQuote: params.buyQuote,
               sellQuote: params.sellQuote,
-              ...(params.positionContext ? { currentPosition: params.positionContext } : {})
+              position: params.positionContext ?? "No current position information provided."
             },
             null,
             2

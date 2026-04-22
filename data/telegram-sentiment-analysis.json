@@ -1,6 +1,6 @@
 {
   "channel": "kaptencrypto707",
-  "analyzedAt": "2026-04-19T02:28:14.235Z",
+  "analyzedAt": "2026-04-22T08:27:52.699Z",
   "overallSentiment": "positive",
   "sentimentScore": 85,
   "mentionedTokens": [
@@ -12,13 +12,14 @@
     {
       "symbol": "ETH",
       "sentiment": "neutral",
-      "confidence": 0.5
+      "confidence": 0
     }
   ],
-  "reasoning": "Strong bullish sentiment and price predictions from analysts, with many expecting Bitcoin to break through resistance levels.",
+  "reasoning": "Strong bullish consensus from the messages, with many users expressing optimism about Bitcoin's price movement.",
   "topBullishSignals": [
-    "Analyst's prediction of Bitcoin breaking through $80k",
-    "Many users expressing optimism about the market"
+    "Bitcoin already broke through resistance at 80k",
+    "Analyst predicts Bitcoin will reach 85k",
+    "Many users are using bot grid trading to profit from the hype"
   ],
   "topBearishSignals": []
 }

@@ -1,0 +1,5 @@
+# NOC probe every 5 minutes (status-change alert + snapshot retention)
+*/5 * * * * cd /home/lasbonai/Desktop/lasbonai/okx-agentic-bot && NOC_RETENTION_DAYS=7 NOC_RETENTION_MAX_FILES=2016 npm run noc:probe:run >> data/logs/noc-runner.log 2>&1
+
+# Optional: every 1 minute (higher granularity, larger report volume)
+# * * * * * cd /home/lasbonai/Desktop/lasbonai/okx-agentic-bot && NOC_RETENTION_DAYS=2 NOC_RETENTION_MAX_FILES=2880 npm run noc:probe:run >> data/logs/noc-runner.log 2>&1

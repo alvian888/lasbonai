@@ -1,0 +1,11 @@
+{
+  "costBasisUsd": 22.610843734958568,
+  "totalSoldUsd": 215.40149970061975,
+  "totalBoughtTokens": 312.65622571163397,
+  "totalSoldTokens": 100.00008612473451,
+  "realizedPnlUsd": 40.87,
+  "peakPnlPct": 0,
+  "lastTradeAction": "sell",
+  "lastTradeTimestamp": 1776655788041,
+  "note": "Corrected: real on-chain XPL=124.51 (BSC RPC confirmed). onchainos --all was stale."
+}

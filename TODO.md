@@ -12,3 +12,35 @@
 - [x] Update `src/baseline-strategy.ts` to consume TA fields (no keyword-based directional inference)
 - [x] Run TypeScript build check
 - [x] Mark TODO items completed
+
+- [x] Validate endpoint profitability by amount benchmark (USDT->BTCB: 1,2,3,5,10,15,20,30)
+- [x] Tune `DEFAULT_BUY_AMOUNT` to 15 USDT based on lower observed impact in sampled range
+- [x] Optimize parallel token evaluator with worker-pool queue in `src/parallel-executor.ts`
+- [x] Harden autostart with startup retries + stale process cleanup in `scripts/autostart-integrated.sh`
+- [x] Fix live preflight guardrail mismatch by aligning `MAX_BUY_AMOUNT` with tuned default
+- [x] Re-validate integrated autostart flow (`compute -> integrate -> preflight -> model refresh -> health OK`)
+- [x] Add autostart single-instance lock (flock/pid fallback) to prevent double-run race
+- [x] Add post-trade receipt verification metadata in bot execution result
+- [x] Include tx receipt status (plus block/gas if available) in Telegram message
+- [x] Add breaker for consecutive failed tx receipts in bot runtime
+- [x] Add high-priority scheduler Telegram alert when failed receipt streak >= 2
+- [x] Add optional watchdog hook in autostart (`AUTOSTART_ENABLE_WATCHDOG`)
+- [x] Add deep health endpoint `/health/deep` with scheduler + receipt snapshot
+- [x] Enable watchdog by default via `.env` and verify monitor process is running
+- [x] Add NOC one-shot probe script `scripts/noc-probe.sh` for /health + /health/deep + watchdog + critical logs
+- [x] Add scheduler stall detection in `scripts/monitor-bot.sh` using `/health/deep` and auto-restart+alert flow
+- [x] Harden `scripts/watchdog-loop.sh` to avoid duplicate spawn when healthy bot already owns port 8787
+- [x] Upgrade `scripts/noc-probe.sh` with PASS/WARN/FAIL summary and automation-friendly exit codes (0/1/2)
+- [x] Add JSON output mode to `scripts/noc-probe.sh` (`--json`) for machine ingestion
+- [x] Add periodic runner `scripts/noc-probe-runner.sh` with snapshot history + alert-on-status-change
+- [x] Add NOC snapshot retention policy (days + max files) and cron template `scripts/noc-probe.crontab.example`
+- [x] Add systemd user service+timer templates and installer (`scripts/install-user-systemd-noc.sh`)
+- [x] Add NOC alert silence window in `scripts/noc-probe-runner.sh` (`NOC_ALERT_SILENCE_HOURS=HH-HH`)
+- [x] Add severity-aware silence bypass in `scripts/noc-probe-runner.sh` (`NOC_ALERT_ALWAYS_FOR`, default `FAIL`)
+
+- [x] Validate profitable endpoints — buy/sell benchmark (5/10/15/20/30 USDT), allowlist token scan
+  - BUY USDT→BTCB: all sizes OK, impact -0.03% to -0.04% (excellent)
+  - SELL BTCB→USDT: all sizes OK, impact +0.14% to +0.20% (excellent)
+  - Allowlist results: ADA-BSC, XRP-BSC, CAKE confirmed good liquidity; IQ (empty priceImpactPercent), DOGE-BSC (8 decimals, OK), WOMBAT/BB (no liquidity), USDC-BSC/BUSD (stablecoins)
+- [x] Clean allowlist — remove USDT (quote token), USDC-BSC, BUSD, WOMBAT, BB from CANDIDATE_ALLOWLIST_ADDRESSES
+- [x] Fix priceImpactPercent empty string guard in `src/baseline-strategy.ts` — warn + use conservative impact fallback for confidence scoring

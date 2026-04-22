@@ -1,0 +1,127 @@
+{
+  "timestamp": "2026-04-20T14:14:13.543591",
+  "wallet": "0x29aa2b1b72c888cb20f3c78e2d21ba225481b8a4",
+  "total_usd": 220.71,
+  "tokens": [
+    {
+      "symbol": "BTCB",
+      "balance": 0.0008399585,
+      "price_usd": 74608.81098979092,
+      "value_usd": 62.6683
+    },
+    {
+      "symbol": "USDT",
+      "balance": 55.7771746775,
+      "price_usd": 1.0,
+      "value_usd": 55.7772
+    },
+    {
+      "symbol": "ETH",
+      "balance": 0.0177682457,
+      "price_usd": 2281.957415310449,
+      "value_usd": 40.5464
+    },
+    {
+      "symbol": "TWT",
+      "balance": 41.083666303,
+      "price_usd": 0.3978919365072096,
+      "value_usd": 16.3469
+    },
+    {
+      "symbol": "LAWAS",
+      "balance": 553989.7954396121,
+      "price_usd": 2.4575137724669e-05,
+      "value_usd": 13.6144
+    },
+    {
+      "symbol": "BNB",
+      "balance": 0.0139684955,
+      "price_usd": 622.6601232522496,
+      "value_usd": 8.6976
+    },
+    {
+      "symbol": "LTC",
+      "balance": 0.107683359,
+      "price_usd": 54.75424649290866,
+      "value_usd": 5.8961
+    },
+    {
+      "symbol": "ADA",
+      "balance": 12.303437882,
+      "price_usd": 0.24434881865787955,
+      "value_usd": 3.0063
+    },
+    {
+      "symbol": "BTT",
+      "balance": 8933865.819518946,
+      "price_usd": 3.11950710146e-07,
+      "value_usd": 2.7869
+    },
+    {
+      "symbol": "GMT",
+      "balance": 6.682079243,
+      "price_usd": 0.29659016840772895,
+      "value_usd": 1.9818
+    },
+    {
+      "symbol": "USDC",
+      "balance": 1.500645114,
+      "price_usd": 1.0,
+      "value_usd": 1.5006
+    },
+    {
+      "symbol": "CAKE",
+      "balance": 0.9729935124,
+      "price_usd": 1.5141445802139617,
+      "value_usd": 1.4733
+    },
+    {
+      "symbol": "BCH",
+      "balance": 0.0033566301,
+      "price_usd": 437.62454441997664,
+      "value_usd": 1.4689
+    },
+    {
+      "symbol": "FIL",
+      "balance": 1.4276947473,
+      "price_usd": 0.9150685989765476,
+      "value_usd": 1.3064
+    },
+    {
+      "symbol": "XRP",
+      "balance": 0.7092931901,
+      "price_usd": 1.4096994511141232,
+      "value_usd": 0.9999
+    },
+    {
+      "symbol": "LINK",
+      "balance": 0.1087957224,
+      "price_usd": 9.171492029302634,
+      "value_usd": 0.9978
+    },
+    {
+      "symbol": "XPL",
+      "balance": 5.5595858849,
+      "price_usd": 0.10420459950078004,
+      "value_usd": 0.5793
+    },
+    {
+      "symbol": "AXL",
+      "balance": 9.235657,
+      "price_usd": 0.05797276724751944,
+      "value_usd": 0.5354
+    },
+    {
+      "symbol": "DOGE",
+      "balance": 5.59406212,
+      "price_usd": 0.09352776884824333,
+      "value_usd": 0.5232
+    },
+    {
+      "symbol": "SAPI",
+      "balance": 12169137.99099191,
+      "price_usd": null,
+      "value_usd": 0
+    }
+  ]
+}

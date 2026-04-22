@@ -29,6 +29,7 @@ async function execWithTimeout(cmd: string, timeoutMs = 8000): Promise<string> {
   }
 }
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, mkdirSync, appendFileSync } from "fs";
+import { writeFile } from "fs/promises";
 import { config, hasTelegramConfig } from "./config.js";
 import mysql from "mysql2/promise";
 
@@ -59,9 +60,184 @@ interface TrailingState {
   sold1: boolean;         // already sold at target1
   sold2: boolean;         // already sold at target2
   sold3: boolean;         // already sold at target3
+  lastSellFailAt: number; // unix ms when a sell swap finally failed
+  swapFailStreak: number;  // consecutive full-retry-exhausted failures (auto-marks unswappable at 3)
+  markedUnswappableAt?: number; // timestamp when streak first hit 3 (for 24h auto-reset)
 }
 
 let trailingStates: Record<string, TrailingState> = {};
+const SELL_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
+
+// ─── Hard-Fail Metrics & Auto-Blacklist ────────────────────────────
+interface HardFailMetric {
+  count: number;        // total hard-fail events this cycle
+  lastFailAt: number;   // unix ms of most recent hard-fail
+  errorClass?: string;  // e.g., "token_transfer_reverted", "honeypot"
+  lastSuccessAt?: number; // unix ms of most recent successful swap (for auto-recovery)
+}
+let hardFailMetrics: Record<string, HardFailMetric> = {};
+let hardFailAutoBlacklist = new Set<string>(); // tokens auto-disabled after N consecutive hard-fails
+const HARD_FAIL_AUTO_BLACKLIST_THRESHOLD = 5; // mark unswappable after 5 hard-fails in one cycle
+
+function recordHardFail(symbol: string, errorClass?: string) {
+  if (!hardFailMetrics[symbol]) {
+    hardFailMetrics[symbol] = { count: 0, lastFailAt: Date.now() };
+  }
+  hardFailMetrics[symbol].count++;
+  hardFailMetrics[symbol].lastFailAt = Date.now();
+  hardFailMetrics[symbol].errorClass = errorClass;
+  
+  // Auto-blacklist if threshold reached in one cycle
+  if (hardFailMetrics[symbol].count >= HARD_FAIL_AUTO_BLACKLIST_THRESHOLD) {
+    hardFailAutoBlacklist.add(symbol);
+    log(`[auto-blacklist] ${symbol} added after ${hardFailMetrics[symbol].count} hard-fails this cycle`);
+  }
+}
+
+function recordSwapSuccess(symbol: string) {
+  if (!hardFailMetrics[symbol]) {
+    hardFailMetrics[symbol] = { count: 0, lastFailAt: 0 };
+  }
+  hardFailMetrics[symbol].lastSuccessAt = Date.now();
+  
+  // Auto-recovery: remove from blacklist if previously blacklisted
+  if (hardFailAutoBlacklist.has(symbol)) {
+    hardFailAutoBlacklist.delete(symbol);
+    log(`[auto-recovery] ${symbol} removed from blacklist after successful swap`);
+  }
+}
+
+function isBlacklistedForAutoSwap(symbol: string): boolean {
+  return hardFailAutoBlacklist.has(symbol);
+}
+
+// Reset hard-fail metrics each cycle
+function resetHardFailMetrics() {
+  hardFailMetrics = {};
+}
+
+// Report hard-fail metrics for this cycle
+function reportHardFailMetrics() {
+  const failures = Object.entries(hardFailMetrics).filter(([_, m]) => m.count > 0);
+  const recovered = Object.entries(hardFailMetrics).filter(([s, m]) => m.lastSuccessAt && m.count > 0 && !hardFailAutoBlacklist.has(s));
+  
+  if (failures.length > 0) {
+    log(`[metrics] Hard-fail report: ${failures.map(([s, m]) => `${s}:${m.count}(${m.errorClass || "?"})`).join(" | ")}`);
+  }
+  
+  if (recovered.length > 0) {
+    log(`[metrics] Auto-recovered: ${recovered.map(([s]) => s).join(", ")}`);
+  }
+}
+
+// ─── Token Health Scoring System ─────────────────────────────────
+// Tracks token reliability over time to auto-adjust swap strategy
+interface TokenHealth {
+  symbol: string;
+  totalSwaps: number;        // all swap attempts (success + fail)
+  successfulSwaps: number;   // successful swaps
+  hardFailEvents: number;    // hard-fail events lifetime
+  recoveryCount: number;     // times removed from blacklist after recovery
+  lastFailAt: number;        // unix ms of most recent hard-fail
+  lastSuccessAt: number;     // unix ms of most recent successful swap
+  healthScore: number;       // 0-100 calculated score (higher = healthier)
+  riskLevel: "🟢 stable" | "🟡 at-risk" | "🔴 high-risk"; // risk classification
+  swapSizeMultiplier: number; // 0.3 (high-risk) to 1.0 (stable) — adjust position size
+  updatedAt: number;         // when last calculated
+}
+
+let tokenHealthMap: Record<string, TokenHealth> = {}; // lifetime token health data
+
+function getOrCreateTokenHealth(symbol: string): TokenHealth {
+  if (!tokenHealthMap[symbol]) {
+    tokenHealthMap[symbol] = {
+      symbol,
+      totalSwaps: 0,
+      successfulSwaps: 0,
+      hardFailEvents: 0,
+      recoveryCount: 0,
+      lastFailAt: 0,
+      lastSuccessAt: 0,
+      healthScore: 100,
+      riskLevel: "🟢 stable",
+      swapSizeMultiplier: 1.0,
+      updatedAt: Date.now(),
+    };
+  }
+  return tokenHealthMap[symbol];
+}
+
+function calculateTokenHealth(symbol: string): TokenHealth {
+  const health = getOrCreateTokenHealth(symbol);
+  const metrics = hardFailMetrics[symbol];
+  
+  // Update lifetime counters if metrics exist
+  if (metrics) {
+    health.hardFailEvents += metrics.count;
+    if (metrics.lastFailAt > health.lastFailAt) {
+      health.lastFailAt = metrics.lastFailAt;
+    }
+    if (metrics.lastSuccessAt && metrics.lastSuccessAt > health.lastSuccessAt) {
+      health.lastSuccessAt = metrics.lastSuccessAt;
+      health.successfulSwaps++;
+      health.recoveryCount++; // count as recovery when lastSuccessAt is updated
+    }
+  }
+  
+  health.totalSwaps = health.successfulSwaps + health.hardFailEvents;
+  
+  // Calculate health score (0-100)
+  let score = 100;
+  
+  if (health.totalSwaps > 0) {
+    const successRate = (health.successfulSwaps / health.totalSwaps) * 100;
+    score = Math.max(0, Math.min(100, successRate - (health.hardFailEvents * 5))); // penalize hard-fails more
+  }
+  
+  // Adjust for time decay: recent success boosts score
+  const msSinceSuccess = Date.now() - health.lastSuccessAt;
+  const daysSinceSuccess = msSinceSuccess / (24 * 60 * 60 * 1000);
+  if (daysSinceSuccess < 1 && health.lastSuccessAt > 0) {
+    score = Math.min(100, score + 10); // recent success bonus
+  }
+  
+  // Assign risk level and swap size multiplier
+  if (score >= 80) {
+    health.riskLevel = "🟢 stable";
+    health.swapSizeMultiplier = 1.0;
+  } else if (score >= 50) {
+    health.riskLevel = "🟡 at-risk";
+    health.swapSizeMultiplier = 0.65;
+  } else {
+    health.riskLevel = "🔴 high-risk";
+    health.swapSizeMultiplier = 0.3;
+  }
+  
+  health.healthScore = Math.round(score);
+  health.updatedAt = Date.now();
+  
+  return health;
+}
+
+function getTokenRiskLevel(symbol: string): TokenHealth {
+  return calculateTokenHealth(symbol);
+}
+
+function reportTokenHealth() {
+  const healths = Object.values(tokenHealthMap)
+    .map(h => calculateTokenHealth(h.symbol))
+    .sort((a, b) => b.healthScore - a.healthScore);
+  
+  const byRisk = {
+    "🟢 stable": healths.filter(h => h.riskLevel === "🟢 stable"),
+    "🟡 at-risk": healths.filter(h => h.riskLevel === "🟡 at-risk"),
+    "🔴 high-risk": healths.filter(h => h.riskLevel === "🔴 high-risk"),
+  };
+  
+  if (healths.length > 0) {
+    log(`[health] Stable: ${byRisk["🟢 stable"].length} | At-risk: ${byRisk["🟡 at-risk"].length} | High-risk: ${byRisk["🔴 high-risk"].length}`);
+  }
+}
 
 // USDT address for selling tokens to
 const USDT_ADDRESS = "0x55d398326f99059ff775485246999027b3197955";
@@ -547,7 +723,26 @@ interface AlertState {
 }
 
 const ONCHAINOS = "/home/lasbonai/.local/bin/onchainos";
+const ONCHAINOS_ROUTER = (config.ONCHAINOS_ROUTER_PREFERENCE || "lifi").trim().toLowerCase();
+const ONCHAINOS_ROUTER_STRICT = Boolean(config.ONCHAINOS_ROUTER_STRICT);
+const ONCHAINOS_SUPPORTS_ROUTER = (() => {
+  if (!ONCHAINOS_ROUTER || ONCHAINOS_ROUTER === "auto") return false;
+  try {
+    const help = execSync(`${ONCHAINOS} swap quote --help`, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return help.includes("--router");
+  } catch {
+    return false;
+  }
+})();
+const ONCHAINOS_ROUTER_ARG = ONCHAINOS_SUPPORTS_ROUTER ? ` --router ${ONCHAINOS_ROUTER}` : "";
+const ONCHAINOS_ROUTER_EFFECTIVE_MODE =
+  !ONCHAINOS_ROUTER || ONCHAINOS_ROUTER === "auto"
+    ? "auto"
+    : ONCHAINOS_SUPPORTS_ROUTER
+      ? `forced:${ONCHAINOS_ROUTER}`
+      : "fallback:no-router-flag";
 const STATE_FILE = "/home/lasbonai/Desktop/lasbonai/okx-agentic-bot/data/bsc-monitor-state.json";
+const METRICS_FILE = "/home/lasbonai/Desktop/lasbonai/okx-agentic-bot/data/hard-fail-metrics.json"; // Daily export
 const LOG_FILE = "/home/lasbonai/Desktop/lasbonai/okx-agentic-bot/logs/bsc-monitor.log";
 const PORTFOLIO_DIR = "/home/lasbonai/Desktop/lasbonai/okx-agentic-bot/token portfolio/BSC";
 const ALERT_COOLDOWN_MS = 15 * 60 * 1000;      // 15 min cooldown per alert type
@@ -583,7 +778,7 @@ const mysqlPool = mysql.createPool({
 async function uploadSnapshotToMySQL(token: TokenConfig, snap: PriceSnapshot) {
   const tableName = `${token.symbol}_BSC`;
   const pnlPct = ((snap.price - token.entryPrice) / token.entryPrice) * 100;
-  const currentValue = snap.price * token.holdings;
+  const currentValue = capTokenValue(token, snap.price * token.holdings);
   const pnlUSD = currentValue - token.entryCost;
   const now = new Date();
   const signal = getSignal(token, snap);
@@ -599,10 +794,12 @@ async function uploadSnapshotToMySQL(token: TokenConfig, snap: PriceSnapshot) {
     \`signal\`, source_file
   ) VALUES (?, ?, 'BSC', 56, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
+  const safeHigh24H = (snap.high24H != null && isFinite(snap.high24H)) ? snap.high24H : null;
+  const safeLow24H  = (snap.low24H  != null && isFinite(snap.low24H))  ? snap.low24H  : null;
   const params = [
     token.symbol, token.name, token.address, token.decimals, token.category,
     now.toISOString().replace("T", " ").replace("Z", ""), snap.timestamp, snap.price, snap.price * USD_TO_IDR,
-    snap.change1H, snap.change4H, snap.change24H, snap.high24H, snap.low24H,
+    snap.change1H, snap.change4H, snap.change24H, safeHigh24H, safeLow24H,
     snap.volume24H, snap.volume24H * USD_TO_IDR, snap.liquidity, snap.liquidity * USD_TO_IDR, snap.txs24H,
     token.holdings, token.entryPrice, token.entryCost, token.entryCost * USD_TO_IDR,
     currentValue, currentValue * USD_TO_IDR, pnlUSD, pnlUSD * USD_TO_IDR, parseFloat(pnlPct.toFixed(2)),
@@ -614,7 +811,29 @@ async function uploadSnapshotToMySQL(token: TokenConfig, snap: PriceSnapshot) {
   try {
     await mysqlPool.execute(sql, params);
   } catch (e: any) {
-    log(`⚠ MySQL upload ${token.symbol}: ${e.message?.split("\n")[0]}`);
+    if (e.message?.includes("doesn't exist")) {
+      try {
+        await mysqlPool.execute(`CREATE TABLE IF NOT EXISTS \`${tableName}\` (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          symbol VARCHAR(20), name VARCHAR(100), chain VARCHAR(10), chain_id INT, address VARCHAR(66), decimals INT, category VARCHAR(20),
+          timestamp VARCHAR(30), timestamp_unix BIGINT, price_usd DOUBLE, price_idr DOUBLE,
+          change_1h DOUBLE, change_4h DOUBLE, change_24h DOUBLE, range24h_high DOUBLE, range24h_low DOUBLE,
+          market_volume24h_usd DOUBLE, market_volume24h_idr DOUBLE, market_liquidity_usd DOUBLE, market_liquidity_idr DOUBLE, market_txs24h INT,
+          portfolio_holdings DOUBLE, portfolio_entryPrice DOUBLE, portfolio_entryCost_usd DOUBLE, portfolio_entryCost_idr DOUBLE,
+          portfolio_currentValue_usd DOUBLE, portfolio_currentValue_idr DOUBLE, portfolio_pnl_usd DOUBLE, portfolio_pnl_idr DOUBLE, portfolio_pnl_pct DOUBLE,
+          zones_buyZone DOUBLE, zones_sellTarget1 DOUBLE, zones_sellTarget2 DOUBLE, zones_sellTarget3 DOUBLE, zones_stopLoss DOUBLE, zones_trailingStop DOUBLE, zones_trailingStopPct DOUBLE,
+          \`signal\` VARCHAR(30), source_file VARCHAR(200),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_timestamp (timestamp_unix), INDEX idx_symbol (symbol)
+        )`);
+        await mysqlPool.execute(sql, params);
+        log(`✅ Auto-created MySQL table ${tableName}`);
+      } catch (createErr: any) {
+        log(`⚠ MySQL auto-create ${tableName}: ${createErr.message?.split("\n")[0]}`);
+      }
+    } else {
+      log(`⚠ MySQL upload ${token.symbol}: ${e.message?.split("\n")[0]}`);
+    }
   }
 }
 
@@ -688,7 +907,7 @@ async function fetchSwapRouteForToken(token: TokenConfig, snap: PriceSnapshot): 
   try {
     // Convert holdings to token units (assumes 18 dec — adjust via --decimals if needed)
     const out = await execWithTimeout(
-      `${ONCHAINOS} swap quote --from-token ${addr} --to-token ${WBNB_ADDRESS} --amount ${sampleAmount} --chain 56 2>/dev/null`,
+      `${ONCHAINOS} swap quote --from-token ${addr} --to-token ${WBNB_ADDRESS} --amount ${sampleAmount} --chain 56${ONCHAINOS_ROUTER_ARG} 2>/dev/null`,
       8000
     );
     if (!out) return;
@@ -754,7 +973,76 @@ for (const t of TOKENS) {
     sold1: false,
     sold2: false,
     sold3: false,
+    lastSellFailAt: 0,
+    swapFailStreak: 0,
   };
+}
+
+function getSellCooldownRemainingMs(symbol: string): number {
+  const lastFailAt = trailingStates[symbol]?.lastSellFailAt ?? 0;
+  if (!lastFailAt) return 0;
+  return Math.max(0, SELL_RETRY_COOLDOWN_MS - (Date.now() - lastFailAt));
+}
+
+function markSellFailureNow(symbol: string) {
+  if (trailingStates[symbol]) {
+    trailingStates[symbol].lastSellFailAt = Date.now();
+    trailingStates[symbol].swapFailStreak = (trailingStates[symbol].swapFailStreak ?? 0) + 1;
+    const streak = trailingStates[symbol].swapFailStreak;
+    if (streak >= 3) {
+      if (!trailingStates[symbol].markedUnswappableAt) {
+        trailingStates[symbol].markedUnswappableAt = Date.now();
+      }
+      log(`🚫 [illiquid-mark] ${symbol}: swap failed ${streak}x — MARKED UNSWAPPABLE, all auto-sell triggers disabled`);
+    } else {
+      log(`⚠ [illiquid-mark] ${symbol}: swap failure streak ${streak}/3 (${3 - streak} more before marking unswappable)`);
+    }
+  }
+}
+
+function isMarkedUnswappable(symbol: string): boolean {
+  const state = trailingStates[symbol];
+  if (!state || (state.swapFailStreak ?? 0) < 3) return false;
+  const markedAt = state.markedUnswappableAt ?? 0;
+  if (markedAt && Date.now() - markedAt > 24 * 60 * 60 * 1000) {
+    log(`✅ [illiquid-mark] ${symbol}: 24h elapsed since unswappable mark — auto-reset`);
+    clearSellFailure(symbol);
+    delete state.markedUnswappableAt;
+    return false;
+  }
+  return true;
+}
+
+function clearSellFailure(symbol: string) {
+  if (trailingStates[symbol] && trailingStates[symbol].lastSellFailAt !== 0) {
+    trailingStates[symbol].lastSellFailAt = 0;
+    trailingStates[symbol].swapFailStreak = 0;
+    delete trailingStates[symbol].markedUnswappableAt;
+  }
+}
+
+function primeUnswappableOnHardFail(symbol: string) {
+  const state = trailingStates[symbol];
+  if (!state) return;
+  state.lastSellFailAt = Date.now();
+  // Prime streak to 2 so the normal failure handler marks UNSWAPPABLE on this same cycle.
+  if ((state.swapFailStreak ?? 0) < 2) state.swapFailStreak = 2;
+}
+
+function classifySwapError(rawError: string): { hardFail: boolean; reason: string } {
+  const msg = rawError.toLowerCase();
+  const hardFailPatterns: Array<{ token: string; reason: string }> = [
+    { token: "safeerc20: low-level call failed", reason: "token_transfer_reverted" },
+    { token: "transferhelper: transfer_from_failed", reason: "token_transfer_reverted" },
+    { token: "cannot sell", reason: "token_sell_restricted" },
+    { token: "sell disabled", reason: "token_sell_restricted" },
+    { token: "honeypot", reason: "suspected_honeypot" },
+    { token: "blacklist", reason: "wallet_blacklisted_or_restricted" },
+  ];
+  for (const p of hardFailPatterns) {
+    if (msg.includes(p.token)) return { hardFail: true, reason: p.reason };
+  }
+  return { hardFail: false, reason: "retryable_or_unknown" };
 }
 
 // ─── CLI Args ──────────────────────────────────────────────────────
@@ -785,6 +1073,8 @@ function log(msg: string) {
   const line = `[${ts}] ${msg}`;
   console.log(line);
   try {
+    // Avoid duplicate lines when a supervisor already redirects stdout to bsc-monitor.log.
+    if (process.env.BSC_MONITOR_DISABLE_INTERNAL_FILE_LOG === "1") return;
     const dir = LOG_FILE.substring(0, LOG_FILE.lastIndexOf("/"));
     mkdirSync(dir, { recursive: true });
     appendFileSync(LOG_FILE, line + "\n");
@@ -834,7 +1124,7 @@ function saveTokenSnapshot(token: TokenConfig, snap: PriceSnapshot) {
     mkdirSync(dir, { recursive: true });
 
     const pnlPct = ((snap.price - token.entryPrice) / token.entryPrice) * 100;
-    const currentValue = snap.price * token.holdings;
+    const currentValue = capTokenValue(token, snap.price * token.holdings);
     const pnlUSD = currentValue - token.entryCost;
 
     const data = {
@@ -890,17 +1180,20 @@ function saveTokenSnapshot(token: TokenConfig, snap: PriceSnapshot) {
       signal: getSignal(token, snap),
     };
 
-    writeFileSync(`${dir}/${fileName}`, JSON.stringify(data, null, 2));
+    // Async write for non-blocking I/O
+    writeFile(`${dir}/${fileName}`, JSON.stringify(data)).catch(() => {});
 
-    // Keep only the 10 newest JSON files, delete older ones
-    const MAX_SNAPSHOTS = 10;
-    const files = readdirSync(dir)
-      .filter((f) => f.endsWith(".json"))
-      .sort()
-      .reverse(); // newest first (filenames contain date_time)
-    if (files.length > MAX_SNAPSHOTS) {
-      for (const old of files.slice(MAX_SNAPSHOTS)) {
-        try { unlinkSync(`${dir}/${old}`); } catch {}
+    // Prune old snapshots only every 10 cycles to reduce readdirSync overhead
+    if (cycleCount % 10 === 0) {
+      const MAX_SNAPSHOTS = 10;
+      const files = readdirSync(dir)
+        .filter((f) => f.endsWith(".json"))
+        .sort()
+        .reverse();
+      if (files.length > MAX_SNAPSHOTS) {
+        for (const old of files.slice(MAX_SNAPSHOTS)) {
+          try { unlinkSync(`${dir}/${old}`); } catch {}
+        }
       }
     }
   } catch (e: any) {
@@ -939,11 +1232,21 @@ function loadState() {
       if (data.lastHourlyReportCycle != null) {
         lastHourlyReportCycle = data.lastHourlyReportCycle;
       }
+      // Restore hard-fail metrics
+      if (data.hardFailMetrics) {
+        hardFailMetrics = data.hardFailMetrics;
+      }
+      // Restore blacklisted tokens
+      if (data.hardFailAutoBlacklistArray && Array.isArray(data.hardFailAutoBlacklistArray)) {
+        hardFailAutoBlacklist = new Set(data.hardFailAutoBlacklistArray);
+      }
     }
   } catch { /* fresh start */ }
 }
 
-function saveState() {
+function saveState(force = false) {
+  // Only save every 5 cycles unless forced (reduces I/O 80%)
+  if (!force && cycleCount % 5 !== 0) return;
   try {
     const dir = STATE_FILE.substring(0, STATE_FILE.lastIndexOf("/"));
     mkdirSync(dir, { recursive: true });
@@ -953,8 +1256,42 @@ function saveState() {
         priceHistory[sym] = priceHistory[sym].slice(-1440);
       }
     }
-    writeFileSync(STATE_FILE, JSON.stringify({ alertStates, priceHistory, cycleCount, trailingStates, profitTracker, capitalBaseline, seedSwapState, lastHourlyReportCycle }, null, 2));
+    // Async write with compact JSON (no pretty-print for speed)
+    writeFile(STATE_FILE, JSON.stringify({ alertStates, priceHistory, cycleCount, trailingStates, profitTracker, capitalBaseline, seedSwapState, lastHourlyReportCycle, hardFailMetrics, hardFailAutoBlacklistArray: Array.from(hardFailAutoBlacklist) })).catch(() => {});
+    // Export metrics to daily file for admin CLI
+    exportMetricsDaily();
   } catch { /* ignore */ }
+}
+
+function exportMetricsDaily() {
+  try {
+    const dir = METRICS_FILE.substring(0, METRICS_FILE.lastIndexOf("/"));
+    mkdirSync(dir, { recursive: true });
+    
+    // Calculate health for all tokens
+    const healthScores: Record<string, any> = {};
+    for (const token of TOKENS) {
+      const health = calculateTokenHealth(token.symbol);
+      healthScores[token.symbol] = {
+        score: health.healthScore,
+        riskLevel: health.riskLevel,
+        successRate: health.totalSwaps > 0 ? ((health.successfulSwaps / health.totalSwaps) * 100).toFixed(1) : "N/A",
+        multiplier: health.swapSizeMultiplier.toFixed(2),
+      };
+    }
+    
+    const metricsData = {
+      exportedAt: new Date().toISOString(),
+      cycle: cycleCount,
+      hardFailMetrics,
+      blacklistedTokens: Array.from(hardFailAutoBlacklist),
+      blacklistThreshold: HARD_FAIL_AUTO_BLACKLIST_THRESHOLD,
+      tokenHealth: healthScores,
+    };
+    writeFileSync(METRICS_FILE, JSON.stringify(metricsData, null, 2));
+  } catch (e) {
+    log(`⚠️ Error exporting metrics: ${e}`);
+  }
 }
 
 // ─── Price Fetching ────────────────────────────────────────────────
@@ -1100,7 +1437,7 @@ async function executeSeedSwaps(): Promise<void> {
   const seedTokens = TOKENS.filter((t) => t.category === "seed");
 
   for (const token of seedTokens) {
-    const onChainBal = getOnChainBalance(token.address) ?? token.holdings;
+    const onChainBal = (await getOnChainBalance(token.address)) ?? token.holdings;
 
     // If token has balance, clear zero-balance tracking
     if (onChainBal > 0) {
@@ -1207,7 +1544,7 @@ interface HourlyReport {
 }
 
 function analyzeTokenPnL(token: TokenConfig, snap: PriceSnapshot): TokenAnalysis {
-  const currentValue = snap.price * token.holdings;
+  const currentValue = capTokenValue(token, snap.price * token.holdings);
   const pnlUSD = currentValue - token.entryCost;
   const pnlPct = ((snap.price - token.entryPrice) / token.entryPrice) * 100;
   const volatility24H = snap.low24H > 0 ? ((snap.high24H - snap.low24H) / snap.low24H) * 100 : 0;
@@ -1812,6 +2149,35 @@ async function sendHourlyPnLReport(snapshots: Map<string, PriceSnapshot>) {
   if (report.topGainers.length > 0) moversText += `\n📈 Top: ${report.topGainers.join(", ")}`;
   if (report.topLosers.length > 0) moversText += `\n📉 Bot: ${report.topLosers.join(", ")}`;
 
+  // Hard-fail metrics summary
+  let metricsText = "";
+  const hardFailCount = Object.values(hardFailMetrics).reduce((sum, m) => sum + m.count, 0);
+  if (hardFailCount > 0 || hardFailAutoBlacklist.size > 0) {
+    const failTokens = Object.entries(hardFailMetrics)
+      .filter(([_, m]) => m.count > 0)
+      .map(([s, m]) => `${s}:${m.count}`)
+      .join(" ");
+    metricsText = `\n\n⚠️ <b>Hard-Fail Metrics:</b>\nFailures: ${failTokens || "none"}\nBlacklisted: ${hardFailAutoBlacklist.size > 0 ? Array.from(hardFailAutoBlacklist).join(", ") : "none"}`;
+  }
+
+  // Token health summary
+  let healthText = "";
+  const riskCounts = { stable: 0, atRisk: 0, highRisk: 0 };
+  const highRiskSymbols: string[] = [];
+  for (const t of TOKENS) {
+    const h = getTokenRiskLevel(t.symbol);
+    if (h.riskLevel === "🟢 stable") riskCounts.stable++;
+    else if (h.riskLevel === "🟡 at-risk") riskCounts.atRisk++;
+    else {
+      riskCounts.highRisk++;
+      highRiskSymbols.push(t.symbol);
+    }
+  }
+  healthText = `\n\n🩺 <b>Token Health:</b>\n🟢 ${riskCounts.stable} | 🟡 ${riskCounts.atRisk} | 🔴 ${riskCounts.highRisk}`;
+  if (highRiskSymbols.length > 0) {
+    healthText += `\nHigh-risk: ${highRiskSymbols.slice(0, 5).join(", ")}`;
+  }
+
   const msg =
     `📈 <b>Hourly P&amp;L Report</b>\n` +
     `🕐 ${report.timestampWIB} WIB | ${report.marketSentiment.toUpperCase()}\n\n` +
@@ -1821,6 +2187,8 @@ async function sendHourlyPnLReport(snapshots: Map<string, PriceSnapshot>) {
     targetLine +
     moversText +
     insightsText +
+    healthText +
+    metricsText +
     `\n\n💸 Pending: $${profitTracker.accumulatedProfitUSDT.toFixed(2)}`;
 
   if (canSendTG) {
@@ -1885,15 +2253,15 @@ function markAlerted(symbol: string, type: keyof AlertState) {
 let walletBalanceCache: { data: Record<string, number>; ts: number } | null = null;
 const WALLET_CACHE_TTL = 20_000;
 
-function getCachedWalletBalances(force = false): Record<string, number> | null {
+async function getCachedWalletBalances(force = false): Promise<Record<string, number> | null> {
   const now = Date.now();
   if (!force && walletBalanceCache && now - walletBalanceCache.ts < WALLET_CACHE_TTL) {
     return walletBalanceCache.data;
   }
   try {
-    const result = execSync(
+    const result = await execWithTimeout(
       `${ONCHAINOS} wallet balance --chain 56 --force`,
-      { timeout: 30000, encoding: "utf-8" }
+      30000
     );
     const parsed = JSON.parse(result);
     if (!parsed.ok) return walletBalanceCache?.data ?? null;
@@ -1914,8 +2282,8 @@ function getCachedWalletBalances(force = false): Record<string, number> | null {
   }
 }
 
-function getOnChainBalance(tokenAddress: string): number | null {
-  const balMap = getCachedWalletBalances();
+async function getOnChainBalance(tokenAddress: string): Promise<number | null> {
+  const balMap = await getCachedWalletBalances();
   if (!balMap) return null;
   if (tokenAddress === "native") {
     return balMap["bnb"] ?? balMap[""] ?? null;
@@ -1924,10 +2292,10 @@ function getOnChainBalance(tokenAddress: string): number | null {
 }
 
 // Sync all token holdings from on-chain wallet at startup
-function syncHoldingsFromChain(): void {
+async function syncHoldingsFromChain(): Promise<void> {
   log("🔄 Syncing holdings from on-chain wallet...");
   // Force-refresh cache on startup
-  const balanceMap = getCachedWalletBalances(true);
+  const balanceMap = await getCachedWalletBalances(true);
   if (!balanceMap) { log("⚠ Holdings sync failed: could not fetch balance"); return; }
 
   for (const token of TOKENS) {
@@ -1957,8 +2325,25 @@ async function executeSwap(
     return false;
   }
 
+  // Illiquid guard: skip if token has 3+ consecutive full-retry swap failures
+  if (isMarkedUnswappable(token.symbol)) {
+    const streak = trailingStates[token.symbol]?.swapFailStreak ?? 0;
+    log(`🚫 [illiquid-mark] ${token.symbol} is UNSWAPPABLE (${streak} consecutive failures) — skip auto-swap (${reason})`);
+    await sendTelegramWith2Buttons(
+      `🚫 <b>${token.symbol} — Swap Disabled (${streak}x failures)</b>\n` +
+      `Auto-swap skipped for: ${reason}\n` +
+      `Token marked illiquid after ${streak} consecutive on-chain failures.\n` +
+      `⚠ Manual sell or remove from portfolio.`,
+      `🔴 Sell on PancakeSwap`,
+      pancakeUrl(token.address, USDT_ADDRESS),
+      `🔴 Sell on OKX DEX`,
+      okxSwapUrl(token.address, USDT_ADDRESS)
+    );
+    return false;
+  }
+
   // Pre-flight: verify on-chain balance before swap
-  const onChainBalance = getOnChainBalance(token.address);
+  const onChainBalance = await getOnChainBalance(token.address);
   if (onChainBalance !== null && onChainBalance < 0.001) {
     log(`⚠ ${token.symbol} on-chain balance is ${onChainBalance} — near zero, skipping swap`);
     log(`📊 Syncing ${token.symbol} holdings: ${token.holdings} → ${onChainBalance}`);
@@ -1992,22 +2377,23 @@ async function executeSwap(
 
   // ── PRE-SWAP SNAPSHOT: balance & price ──
   const preTokenBal = onChainBalance ?? effectiveHoldings;
-  const preUsdtBal = getOnChainBalance(USDT_ADDRESS) ?? 0;
+  const preUsdtBal = (await getOnChainBalance(USDT_ADDRESS)) ?? 0;
   const prePrice = price;
   const preValueUSD = preTokenBal * prePrice;
   log(`📋 PRE-SWAP  | ${token.symbol}: ${preTokenBal.toFixed(4)} @ $${prePrice.toFixed(6)} ($${preValueUSD.toFixed(2)}) | USDT: ${preUsdtBal.toFixed(2)}`);
 
-  const SLIPPAGE_TIERS = (token.category === "moonshot" || token.category === "swing") ? [5, 8, 12] : [2.5, 5, 8];
+  const SLIPPAGE_TIERS = (token.category === "moonshot" || token.category === "swing") ? [3, 5, 8] : [0.5, 1.5, 3];
   const MAX_RETRIES = SLIPPAGE_TIERS.length;
-  const roundedAmount = Math.floor(parseFloat(sellAmount));
+  const readableAmount = sellAmount;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const slippage = SLIPPAGE_TIERS[attempt - 1];
     const cmd = `${ONCHAINOS} swap execute` +
       ` --from ${token.address}` +
       ` --to ${USDT_ADDRESS}` +
-      ` --readable-amount ${roundedAmount}` +
+      ` --readable-amount ${readableAmount}` +
       ` --chain bsc` +
       ` --wallet ${WALLET_ADDRESS}` +
+      `${ONCHAINOS_ROUTER_ARG}` +
       ` --slippage ${slippage}`;
     try {
       if (attempt > 1) log(`🔁 ${token.symbol} sell retry #${attempt} with slippage ${slippage}%`);
@@ -2028,8 +2414,8 @@ async function executeSwap(
 
         // ── POST-SWAP SNAPSHOT: wait for BSC confirmation before reading balance ──
         await new Promise((r) => setTimeout(r, 7000)); // BSC block time ~3s + buffer
-        const postTokenBal = getOnChainBalance(token.address) ?? (effectiveHoldings - sellTokens);
-        const postUsdtBal = getOnChainBalance(USDT_ADDRESS) ?? preUsdtBal;
+        const postTokenBal = (await getOnChainBalance(token.address)) ?? (effectiveHoldings - sellTokens);
+        const postUsdtBal = (await getOnChainBalance(USDT_ADDRESS)) ?? preUsdtBal;
         const actualReceived = postUsdtBal - preUsdtBal;
         const actualSold = preTokenBal - postTokenBal;
         log(`📋 POST-SWAP | ${token.symbol}: ${postTokenBal.toFixed(4)} (Δ -${actualSold.toFixed(4)}) | USDT: ${postUsdtBal.toFixed(2)} (Δ +${actualReceived.toFixed(2)})`);
@@ -2055,8 +2441,43 @@ async function executeSwap(
         // Update holdings from actual on-chain balance
         token.holdings = postTokenBal;
         token.entryCost = token.entryCost * (1 - sellPct / 100);
+        
+        // Record success for auto-recovery (remove from blacklist if previously blacklisted)
+        recordSwapSuccess(token.symbol);
+        
         return true;
       } else {
+        const parsedErrRaw = String(parsed?.error ?? JSON.stringify(parsed));
+        const parsedErr = parsedErrRaw.toLowerCase();
+        const errClass = classifySwapError(parsedErrRaw);
+
+        if (errClass.hardFail) {
+          recordHardFail(token.symbol, errClass.reason);
+          primeUnswappableOnHardFail(token.symbol);
+          log(`🚫 SWAP HARD-FAIL (${errClass.reason}): ${token.symbol} — ${parsedErrRaw.slice(0, 220)}. Not retrying slippage tiers.`);
+          await sendTelegramWith2Buttons(
+            `🚫 <b>SWAP HARD-FAIL — ${token.symbol}</b>\n` +
+            `Type: ${errClass.reason}\n` +
+            `Reason: ${parsedErrRaw.slice(0, 140)}\n` +
+            `Likely token-level transfer restriction (not slippage).\n` +
+            `⚠ Manual action required.`,
+            `🔄 Swap on PancakeSwap`,
+            pancakeUrl(token.address, USDT_ADDRESS),
+            `🔄 Swap on OKX DEX`,
+            okxSwapUrl(token.address, USDT_ADDRESS)
+          );
+          return false;
+        }
+
+        const retryableParsedFailure = ["simulation", "estimategas", "execution reverted", "safeerc20", "timeout", "temporar", "underpriced"]
+          .some((k) => parsedErr.includes(k));
+
+        if (attempt < MAX_RETRIES && retryableParsedFailure) {
+          log(`⚠ SWAP FAILED (attempt ${attempt}/${MAX_RETRIES}, slippage ${slippage}%): ${token.symbol} — ${String(parsed?.error ?? "parsed_error")}. Retrying with higher slippage...`);
+          await new Promise((r) => setTimeout(r, 3000));
+          continue;
+        }
+
         log(`❌ SWAP FAILED: ${JSON.stringify(parsed).slice(0, 200)}`);
         await sendTelegramWith2Buttons(
           `❌ <b>SWAP FAILED — ${token.symbol}</b>\n` +
@@ -2071,6 +2492,25 @@ async function executeSwap(
       }
     } catch (e: any) {
       const errMsg = e.message?.split("\n")[0] || "Unknown error";
+      const errClass = classifySwapError(errMsg);
+
+      if (errClass.hardFail) {
+        recordHardFail(token.symbol, errClass.reason);
+        primeUnswappableOnHardFail(token.symbol);
+        log(`🚫 SWAP HARD-FAIL (${errClass.reason}): ${token.symbol} — ${errMsg}. Not retrying slippage tiers.`);
+        await sendTelegramWith2Buttons(
+          `🚫 <b>SWAP HARD-FAIL — ${token.symbol}</b>\n` +
+          `Type: ${errClass.reason}\n` +
+          `Reason: ${errMsg.slice(0, 140)}\n` +
+          `Likely token-level transfer restriction (not slippage).\n` +
+          `⚠ Manual action required.`,
+          `🔄 Swap on PancakeSwap`,
+          pancakeUrl(token.address, USDT_ADDRESS),
+          `🔄 Swap on OKX DEX`,
+          okxSwapUrl(token.address, USDT_ADDRESS)
+        );
+        return false;
+      }
 
       // Retry with next slippage tier if attempts remain
       if (attempt < MAX_RETRIES) {
@@ -2081,7 +2521,7 @@ async function executeSwap(
 
       // All retries exhausted
       log(`❌ SWAP ERROR after ${MAX_RETRIES} attempts: ${token.symbol} — ${errMsg}`);
-      const freshBalance = getOnChainBalance(token.address);
+      const freshBalance = await getOnChainBalance(token.address);
       if (freshBalance !== null) {
         log(`📊 Auto-syncing ${token.symbol} holdings: ${token.holdings} → ${freshBalance}`);
         token.holdings = freshBalance;
@@ -2108,7 +2548,7 @@ async function executeBuy(
   usdtAmount: number,
   reason: string
 ): Promise<boolean> {
-  const usdtBalance = getOnChainBalance(USDT_ADDRESS) ?? 0;
+  const usdtBalance = (await getOnChainBalance(USDT_ADDRESS)) ?? 0;
   const MIN_USDT_RESERVE = 3; // keep at least $3 USDT as reserve
   if (usdtBalance < usdtAmount + MIN_USDT_RESERVE) {
     log(`⚠ AUTO-BUY skip ${token.symbol}: USDT ${usdtBalance.toFixed(2)} < needed ${(usdtAmount + MIN_USDT_RESERVE).toFixed(2)}`);
@@ -2118,9 +2558,9 @@ async function executeBuy(
   log(`🛒 AUTO-BUY: Spending ${usdtAmount} USDT → ${token.symbol} [${reason}] | USDT bal: ${usdtBalance.toFixed(2)}`);
 
   const preUsdtBal = usdtBalance;
-  const preTokenBal = getOnChainBalance(token.address) ?? token.holdings;
+  const preTokenBal = (await getOnChainBalance(token.address)) ?? token.holdings;
 
-  const SLIPPAGE_TIERS_BUY = (token.category === "moonshot" || token.category === "swing") ? [5, 8, 12] : [2.5, 5, 8];
+  const SLIPPAGE_TIERS_BUY = (token.category === "moonshot" || token.category === "swing") ? [3, 5, 8] : [0.5, 1.5, 3];
   const MAX_RETRIES = SLIPPAGE_TIERS_BUY.length;
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const slippage = SLIPPAGE_TIERS_BUY[attempt - 1];
@@ -2130,6 +2570,7 @@ async function executeBuy(
       ` --readable-amount ${usdtAmount.toFixed(2)}` +
       ` --chain bsc` +
       ` --wallet ${WALLET_ADDRESS}` +
+      `${ONCHAINOS_ROUTER_ARG}` +
       ` --slippage ${slippage}`;
     try {
       if (attempt > 1) log(`🔁 ${token.symbol} buy retry #${attempt} with slippage ${slippage}%`);
@@ -2148,8 +2589,8 @@ async function executeBuy(
         log(`✅ AUTO-BUY SUCCESS: USDT → ${token.symbol} | tx: ${txHash}${attempt > 1 ? ` (retry #${attempt - 1})` : ""}`);
 
         await new Promise((r) => setTimeout(r, 7000)); // wait BSC confirmation
-        const postTokenBal = getOnChainBalance(token.address) ?? (preTokenBal + usdtAmount / token.entryPrice);
-        const postUsdtBal = getOnChainBalance(USDT_ADDRESS) ?? (preUsdtBal - usdtAmount);
+        const postTokenBal = (await getOnChainBalance(token.address)) ?? (preTokenBal + usdtAmount / token.entryPrice);
+        const postUsdtBal = (await getOnChainBalance(USDT_ADDRESS)) ?? (preUsdtBal - usdtAmount);
         const tokenReceived = postTokenBal - preTokenBal;
         log(`📋 POST-BUY  | ${token.symbol}: ${postTokenBal.toFixed(4)} (Δ +${tokenReceived.toFixed(4)}) | USDT: ${postUsdtBal.toFixed(2)} (Δ -${(preUsdtBal - postUsdtBal).toFixed(2)})`);
 
@@ -2271,8 +2712,11 @@ function buildMarketCtx(token: TokenConfig, snap: PriceSnapshot): string {
 // ─── Alert Logic (with auto-execute & trailing stops) ──────────────
 async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
   const pnlPct = ((snap.price - token.entryPrice) / token.entryPrice) * 100;
-  const currentValue = snap.price * token.holdings;
+  const currentValue = capTokenValue(token, snap.price * token.holdings);
   const ts = trailingStates[token.symbol];
+  const sellCooldownRemainingMs = getSellCooldownRemainingMs(token.symbol);
+  const sellCooldownActive = sellCooldownRemainingMs > 0;
+  const sellCooldownMin = Math.ceil(sellCooldownRemainingMs / 60000);
 
   // Update trailing stop
   updateTrailingStop(token, snap.price);
@@ -2288,13 +2732,44 @@ async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
     // Auto-execute: sell 100% at stop-loss
     const _stopCtx = buildMarketCtx(token, snap);
     if (token.autoExecute) {
-      await sendTelegram(
-        `🔴 <b>STOP LOSS HIT — ${token.symbol}</b>\n` +
-        `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
-        `Value: ${formatIDR(currentValue)}\n` +
-        `🤖 Auto-selling 100%...` + _stopCtx
-      );
-      await executeSwap(token, 100, "STOP-LOSS", snap.price);
+      if (isBlacklistedForAutoSwap(token.symbol)) {
+        log(`🚫 ${token.symbol} is auto-blacklisted (repeated hard-fails), skip STOP-LOSS auto-swap`);
+        await sendTelegramWith2Buttons(
+          `🚫 <b>STOP LOSS — ${token.symbol} BLOCKED</b>\n` +
+          `Token auto-blacklisted due to repeated swap failures.\n` +
+          `⚠ Manual sell required!` + _stopCtx,
+          `🔴 Sell on PancakeSwap`,
+          pancakeUrl(token.address, USDT_ADDRESS),
+          `🔴 Sell on OKX DEX`,
+          okxSwapUrl(token.address, USDT_ADDRESS)
+        );
+      } else if (sellCooldownActive) {
+        log(`⏸ ${token.symbol} auto-sell cooldown active (${sellCooldownMin}m left), skip STOP-LOSS auto-swap this cycle`);
+        await sendTelegramWith2Buttons(
+          `⏸ <b>STOP LOSS — ${token.symbol}</b>\n` +
+          `Auto-sell cooldown active (${sellCooldownMin}m left).\n` +
+          `⚠ Manual sell recommended now!` + _stopCtx,
+          `🔴 Sell on PancakeSwap`,
+          pancakeUrl(token.address, USDT_ADDRESS),
+          `🔴 Sell on OKX DEX`,
+          okxSwapUrl(token.address, USDT_ADDRESS)
+        );
+      } else {
+        // Apply health-based position sizing for stop-loss sells
+        const health = getTokenRiskLevel(token.symbol);
+        const sellPct = health.swapSizeMultiplier >= 0.8 ? 100 : 50; // High-risk: partial sell only
+        const healthNote = sellPct < 100 ? ` (${health.riskLevel} → partial ${sellPct}%)` : "";
+        
+        await sendTelegram(
+          `🔴 <b>STOP LOSS HIT — ${token.symbol}</b>\n` +
+          `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
+          `Value: ${formatIDR(currentValue)}\n` +
+          `🤖 Auto-selling ${sellPct}%...${healthNote}` + _stopCtx
+        );
+        const ok = await executeSwap(token, sellPct, "STOP-LOSS", snap.price);
+        if (ok) clearSellFailure(token.symbol);
+        else markSellFailureNow(token.symbol);
+      }
     } else {
       await sendTelegramWith2Buttons(
         `🔴 <b>STOP LOSS — ${token.symbol}</b>\n` +
@@ -2319,12 +2794,27 @@ async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
 
       const _trailCtx = buildMarketCtx(token, snap);
       if (token.autoExecute) {
-        await sendTelegram(
-          `📉 <b>TRAILING STOP — ${token.symbol}</b>\n` +
-          `Price: ${formatPrice(snap.price)} (peak: ${formatPrice(ts.peakPrice)}, -${dropFromPeak}%)\n` +
-          `🤖 Auto-selling 100%...` + _trailCtx
-        );
-        await executeSwap(token, 100, `TRAILING-STOP (peak ${formatPrice(ts.peakPrice)})`, snap.price);
+        if (sellCooldownActive) {
+          log(`⏸ ${token.symbol} auto-sell cooldown active (${sellCooldownMin}m left), skip TRAILING-STOP auto-swap this cycle`);
+          await sendTelegramWith2Buttons(
+            `⏸ <b>TRAILING STOP — ${token.symbol}</b>\n` +
+            `Auto-sell cooldown active (${sellCooldownMin}m left).\n` +
+            `⚠ Manual sell recommended now!` + _trailCtx,
+            `📉 Sell on PancakeSwap`,
+            pancakeUrl(token.address, USDT_ADDRESS),
+            `📉 Sell on OKX DEX`,
+            okxSwapUrl(token.address, USDT_ADDRESS)
+          );
+        } else {
+          await sendTelegram(
+            `📉 <b>TRAILING STOP — ${token.symbol}</b>\n` +
+            `Price: ${formatPrice(snap.price)} (peak: ${formatPrice(ts.peakPrice)}, -${dropFromPeak}%)\n` +
+            `🤖 Auto-selling 100%...` + _trailCtx
+          );
+          const ok = await executeSwap(token, 100, `TRAILING-STOP (peak ${formatPrice(ts.peakPrice)})`, snap.price);
+          if (ok) clearSellFailure(token.symbol);
+          else markSellFailureNow(token.symbol);
+        }
       } else {
         await sendTelegramWith2Buttons(
           `📉 <b>TRAILING STOP — ${token.symbol}</b>\n` +
@@ -2349,13 +2839,24 @@ async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
 
     const _t1Ctx = buildMarketCtx(token, snap);
     if (token.autoExecute) {
-      await sendTelegram(
-        `🟢 <b>TARGET 1 (+3%) — ${token.symbol}</b>\n` +
-        `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
-        `🤖 Auto-selling 30%...` + _t1Ctx
-      );
-      const ok = await executeSwap(token, 30, "TARGET-1 (+3%)", snap.price);
-      if (!ok) { ts.sold1 = false; log(`⚠ Rolled back sold1 for ${token.symbol} — will retry next cycle`); }
+      if (sellCooldownActive) {
+        ts.sold1 = false;
+        log(`⏸ ${token.symbol} auto-sell cooldown active (${sellCooldownMin}m left), skip TARGET-1 auto-swap this cycle`);
+      } else {
+        await sendTelegram(
+          `🟢 <b>TARGET 1 (+3%) — ${token.symbol}</b>\n` +
+          `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
+          `🤖 Auto-selling 30%...` + _t1Ctx
+        );
+        const ok = await executeSwap(token, 30, "TARGET-1 (+3%)", snap.price);
+        if (!ok) {
+          ts.sold1 = false;
+          markSellFailureNow(token.symbol);
+          log(`⚠ Rolled back sold1 for ${token.symbol} — will retry next cycle`);
+        } else {
+          clearSellFailure(token.symbol);
+        }
+      }
     } else {
       await sendTelegramWith2Buttons(
         `🟢 <b>TARGET 1 (+3%) — ${token.symbol}</b>\n` +
@@ -2376,13 +2877,24 @@ async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
 
     const _t2Ctx = buildMarketCtx(token, snap);
     if (token.autoExecute) {
-      await sendTelegram(
-        `🟡 <b>TARGET 2 (+7%) — ${token.symbol}</b>\n` +
-        `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
-        `🤖 Auto-selling 30% more...` + _t2Ctx
-      );
-      const ok = await executeSwap(token, 30, "TARGET-2 (+7%)", snap.price);
-      if (!ok) { ts.sold2 = false; log(`⚠ Rolled back sold2 for ${token.symbol} — will retry next cycle`); }
+      if (sellCooldownActive) {
+        ts.sold2 = false;
+        log(`⏸ ${token.symbol} auto-sell cooldown active (${sellCooldownMin}m left), skip TARGET-2 auto-swap this cycle`);
+      } else {
+        await sendTelegram(
+          `🟡 <b>TARGET 2 (+7%) — ${token.symbol}</b>\n` +
+          `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
+          `🤖 Auto-selling 30% more...` + _t2Ctx
+        );
+        const ok = await executeSwap(token, 30, "TARGET-2 (+7%)", snap.price);
+        if (!ok) {
+          ts.sold2 = false;
+          markSellFailureNow(token.symbol);
+          log(`⚠ Rolled back sold2 for ${token.symbol} — will retry next cycle`);
+        } else {
+          clearSellFailure(token.symbol);
+        }
+      }
     } else {
       await sendTelegramWith2Buttons(
         `🟡 <b>TARGET 2 (+7%) — ${token.symbol}</b>\n` +
@@ -2403,13 +2915,24 @@ async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
 
     const _t3Ctx = buildMarketCtx(token, snap);
     if (token.autoExecute) {
-      await sendTelegram(
-        `🏆 <b>TARGET 3 (+12%) — ${token.symbol}</b>\n` +
-        `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
-        `🤖 Auto-selling remaining position!` + _t3Ctx
-      );
-      const ok = await executeSwap(token, 100, "TARGET-3 (+12%) FULL EXIT", snap.price);
-      if (!ok) { ts.sold3 = false; log(`⚠ Rolled back sold3 for ${token.symbol} — will retry next cycle`); }
+      if (sellCooldownActive) {
+        ts.sold3 = false;
+        log(`⏸ ${token.symbol} auto-sell cooldown active (${sellCooldownMin}m left), skip TARGET-3 auto-swap this cycle`);
+      } else {
+        await sendTelegram(
+          `🏆 <b>TARGET 3 (+12%) — ${token.symbol}</b>\n` +
+          `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
+          `🤖 Auto-selling remaining position!` + _t3Ctx
+        );
+        const ok = await executeSwap(token, 100, "TARGET-3 (+12%) FULL EXIT", snap.price);
+        if (!ok) {
+          ts.sold3 = false;
+          markSellFailureNow(token.symbol);
+          log(`⚠ Rolled back sold3 for ${token.symbol} — will retry next cycle`);
+        } else {
+          clearSellFailure(token.symbol);
+        }
+      }
     } else {
       await sendTelegramWith2Buttons(
         `🏆 <b>TARGET 3 (+12%) — ${token.symbol}</b>\n` +
@@ -2435,14 +2958,20 @@ async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
       if (canDca) {
         if (!autoBuyState) markAlerted(token.symbol, "lastBuyAlert"); // ensure state exists
         alertStates[token.symbol].lastAutoBuy = Date.now();
+        
+        // Apply health-based position sizing
+        const health = getTokenRiskLevel(token.symbol);
+        const adjustedBuyAmount = Math.round(DCA_BUY_USD * health.swapSizeMultiplier * 100) / 100;
+        const healthNote = health.swapSizeMultiplier < 1.0 ? ` (${health.riskLevel} → $${adjustedBuyAmount})` : "";
+        
         await sendTelegram(
           `🔵 <b>BUY ZONE — ${token.symbol}</b>\n` +
           `Price: ${formatPrice(snap.price)} (${pnlPct > 0 ? "+" : ""}${pnlPct.toFixed(2)}%)\n` +
           `Buy zone: &lt; ${formatPrice(token.buyZone)}\n` +
-          `🤖 Auto-DCA: buying $${DCA_BUY_USD} USDT worth...`
+          `🤖 Auto-DCA: buying $${adjustedBuyAmount} USDT worth...${healthNote}`
         );
-        log(`🔵 AUTO-BUY ZONE ${token.symbol} @ ${formatPrice(snap.price)} — DCA $${DCA_BUY_USD}`);
-        await executeBuy(token, DCA_BUY_USD, `BUY ZONE DCA @ ${formatPrice(snap.price)}`);
+        log(`🔵 AUTO-BUY ZONE ${token.symbol} @ ${formatPrice(snap.price)} — DCA $${adjustedBuyAmount}${healthNote}`);
+        await executeBuy(token, adjustedBuyAmount, `BUY ZONE DCA @ ${formatPrice(snap.price)}`);
       } else {
         const hoursLeft = ((AUTO_BUY_COOLDOWN_MS - (Date.now() - lastAutoBuy)) / 3_600_000).toFixed(1);
         log(`🔵 BUY ZONE ${token.symbol} @ ${formatPrice(snap.price)} — auto-buy cooldown (${hoursLeft}h left)`);
@@ -2489,16 +3018,37 @@ async function checkAlerts(token: TokenConfig, snap: PriceSnapshot) {
 
 // ─── Modal Awal (Capital Baseline) ─────────────────────────────────
 // Hitung total portfolio value dari semua token holdings × harga saat ini
+// Cap illiquid/airdrop tokens: if on-chain value > 50× entryCost, cap at entryCost
+// (prevents phantom airdrop tokens from inflating portfolio)
+const AIRDROP_VALUE_CAP_MULTIPLIER = 50;
+const AIRDROP_MIN_VALUE_THRESHOLD = 500; // Only cap if raw value exceeds $500 (avoids capping legitimate dust)
+
+/** Cap token value if it looks like an illiquid airdrop (value >> entryCost AND > $500) */
+function capTokenValue(token: TokenConfig, rawValue: number): number {
+  if (
+    token.entryCost > 0 &&
+    rawValue > AIRDROP_MIN_VALUE_THRESHOLD &&
+    rawValue > token.entryCost * AIRDROP_VALUE_CAP_MULTIPLIER
+  ) {
+    return token.entryCost;
+  }
+  return rawValue;
+}
+
 function calcTotalPortfolioValue(snapshots: Map<string, PriceSnapshot>): number {
   let total = 0;
   for (const token of TOKENS) {
     const snap = snapshots.get(token.symbol);
-    if (snap) {
-      total += snap.price * token.holdings;
-    } else {
-      // Fallback: gunakan entry price jika harga tidak tersedia
-      total += token.entryPrice * token.holdings;
+    const price = snap ? snap.price : token.entryPrice;
+    const rawValue = price * token.holdings;
+    const tokenValue = capTokenValue(token, rawValue);
+
+    // Log only on first detection per cycle
+    if (tokenValue !== rawValue) {
+      log(`⚠ ${token.symbol}: capping portfolio value $${rawValue.toFixed(2)} → $${tokenValue.toFixed(2)} (likely illiquid/airdrop, ${(rawValue / token.entryCost).toFixed(0)}× entry cost)`);
     }
+
+    total += tokenValue;
   }
   return total;
 }
@@ -2589,7 +3139,7 @@ async function withdrawProfit(snapshots: Map<string, PriceSnapshot>, overrideAmo
   const amountStr = amount.toFixed(6);
 
   // ── PRE-WITHDRAWAL SNAPSHOT: USDT balance ──
-  const preUsdtBal = getOnChainBalance(USDT_ADDRESS) ?? 0;
+  const preUsdtBal = (await getOnChainBalance(USDT_ADDRESS)) ?? 0;
   log(`💸 WEEKLY WITHDRAWAL: Sending $${amountStr} USDT to profit wallet ${PROFIT_WALLET}`);
   log(`📋 PRE-WITHDRAW  | USDT: ${preUsdtBal.toFixed(2)}`);
 
@@ -2602,7 +3152,7 @@ async function withdrawProfit(snapshots: Map<string, PriceSnapshot>, overrideAmo
       ` --from ${WALLET_ADDRESS}` +
       ` --force`;
 
-    const result = execSync(cmd, { timeout: 60000, encoding: "utf-8" });
+    const result = await execWithTimeout(cmd, 60000);
     const parsed = JSON.parse(result);
 
     if (parsed.ok || parsed.txHash || parsed.data?.txHash) {
@@ -2610,7 +3160,7 @@ async function withdrawProfit(snapshots: Map<string, PriceSnapshot>, overrideAmo
       const dateStr = new Date().toISOString().split("T")[0];
 
       // ── POST-WITHDRAWAL SNAPSHOT: USDT balance ──
-      const postUsdtBal = getOnChainBalance(USDT_ADDRESS) ?? (preUsdtBal - amount);
+      const postUsdtBal = (await getOnChainBalance(USDT_ADDRESS)) ?? (preUsdtBal - amount);
       const actualSent = preUsdtBal - postUsdtBal;
       log(`✅ WITHDRAWAL SUCCESS: $${amountStr} USDT → ${PROFIT_WALLET} | tx: ${txHash}`);
       log(`📋 POST-WITHDRAW | USDT: ${postUsdtBal.toFixed(2)} (Δ -${actualSent.toFixed(2)})`);
@@ -2688,7 +3238,7 @@ function printDashboard(snapshots: Map<string, PriceSnapshot>) {
     }
 
     const pnlPct = ((snap.price - token.entryPrice) / token.entryPrice) * 100;
-    const currentValue = snap.price * token.holdings;
+    const currentValue = capTokenValue(token, snap.price * token.holdings);
     const pnlUSD = currentValue - token.entryCost;
     totalValue += currentValue;
     totalCost += token.entryCost;
@@ -2809,17 +3359,28 @@ function printDashboard(snapshots: Map<string, PriceSnapshot>) {
 // ─── Main Loop ─────────────────────────────────────────────────────
 async function runCycle() {
   cycleCount++;
+  resetHardFailMetrics();  // Clear metrics counters for this cycle
+  const cycleStart = Date.now();
   const snapshots = new Map<string, PriceSnapshot>();
 
-  // ── Fetch all token prices sequentially async (non-blocking, 200ms gap anti-throttle)
-  for (const token of TOKENS) {
-    const snap = await fetchPriceInfo(token);
-    if (snap) {
-      snapshots.set(token.symbol, snap);
-      if (!priceHistory[token.symbol]) priceHistory[token.symbol] = [];
-      priceHistory[token.symbol].push(snap);
+  // ── Fetch all token prices in parallel batches (concurrency=5, 200ms stagger between batches)
+  const priceStart = Date.now();
+  const PRICE_BATCH_SIZE = 5;
+  for (let i = 0; i < TOKENS.length; i += PRICE_BATCH_SIZE) {
+    const batch = TOKENS.slice(i, i + PRICE_BATCH_SIZE);
+    const batchResults = await Promise.allSettled(
+      batch.map((token) => fetchPriceInfo(token))
+    );
+    for (let j = 0; j < batch.length; j++) {
+      const result = batchResults[j];
+      if (result.status === "fulfilled" && result.value) {
+        const snap = result.value;
+        snapshots.set(batch[j].symbol, snap);
+        if (!priceHistory[batch[j].symbol]) priceHistory[batch[j].symbol] = [];
+        priceHistory[batch[j].symbol].push(snap);
+      }
     }
-    await new Promise((r) => setTimeout(r, 200));
+    if (i + PRICE_BATCH_SIZE < TOKENS.length) await new Promise((r) => setTimeout(r, 200));
   }
 
   // ── Refresh buy/sell pressure every 5 cycles (parallel across tokens)
@@ -2847,18 +3408,20 @@ async function runCycle() {
   }
   if (swapRouteTasks.length > 0) await Promise.allSettled(swapRouteTasks);
 
-  // ── Refresh liquidity pool cache every LIQUIDITY_POOL_INTERVAL cycles (staggered)
+  // ── Refresh liquidity pool cache every LIQUIDITY_POOL_INTERVAL cycles (parallel batch)
+  const liquidityTasks: Promise<void>[] = [];
   for (let i = 0; i < TOKENS.length; i++) {
     const token = TOKENS[i];
     const entry = liquidityPoolCache.get(token.symbol);
     const needsRefresh = !entry || (cycleCount - entry.updatedAtCycle) >= LIQUIDITY_POOL_INTERVAL;
     if (needsRefresh && (cycleCount + i) % LIQUIDITY_POOL_INTERVAL === 0) {
-      await fetchLiquidityPool(token);
-      await new Promise((r) => setTimeout(r, 300));
+      liquidityTasks.push(fetchLiquidityPool(token));
     }
   }
+  if (liquidityTasks.length > 0) await Promise.allSettled(liquidityTasks);
 
   // Print dashboard
+  log(`⏱ prices=${Date.now() - priceStart}ms cycle#${cycleCount} tokens=${snapshots.size}/${TOKENS.length}`);
   printDashboard(snapshots);
 
   // Save JSON snapshots to token portfolio
@@ -2867,17 +3430,21 @@ async function runCycle() {
     if (snap) saveTokenSnapshot(token, snap);
   }
 
-  // Upload snapshots to MySQL (token_info DB)
-  for (const token of TOKENS) {
-    const snap = snapshots.get(token.symbol);
-    if (snap) await uploadSnapshotToMySQL(token, snap);
-  }
+  // Upload snapshots to MySQL in parallel (connection pool handles concurrency)
+  await Promise.allSettled(
+    TOKENS.map((token) => {
+      const snap = snapshots.get(token.symbol);
+      return snap ? uploadSnapshotToMySQL(token, snap) : Promise.resolve();
+    })
+  );
 
-  // Check alerts for each token
-  for (const token of TOKENS) {
-    const snap = snapshots.get(token.symbol);
-    if (snap) await checkAlerts(token, snap);
-  }
+  // Check alerts for each token in parallel
+  await Promise.allSettled(
+    TOKENS.map((token) => {
+      const snap = snapshots.get(token.symbol);
+      return snap ? checkAlerts(token, snap) : Promise.resolve();
+    })
+  );
 
   // Execute seed swaps (zero-balance tokens >1 day → auto buy 1 USDT)
   await executeSeedSwaps();
@@ -2897,17 +3464,33 @@ async function runCycle() {
   }
 
   saveState();
+  reportHardFailMetrics();  // Report hard-fail metrics for this cycle
+  reportTokenHealth();      // Report token health scores
+  log(`⏱ cycle#${cycleCount} total=${Date.now() - cycleStart}ms`);
 }
 
 async function main() {
   log("═══ LasbonBSCbot started ═══");
   log(`Monitoring: ${TOKENS.map((t) => t.symbol).join(", ")}`);
   log(`Interval: ${intervalSec}s | Telegram: ${noTelegram ? "OFF" : "ON"}`);
+  log(
+    `[router] requested=${ONCHAINOS_ROUTER || "auto"} ` +
+      `supported=${ONCHAINOS_SUPPORTS_ROUTER} effective=${ONCHAINOS_ROUTER_EFFECTIVE_MODE} strict=${ONCHAINOS_ROUTER_STRICT}`,
+  );
+
+  if (
+    ONCHAINOS_ROUTER_STRICT &&
+    ONCHAINOS_ROUTER &&
+    ONCHAINOS_ROUTER !== "auto" &&
+    !ONCHAINOS_SUPPORTS_ROUTER
+  ) {
+    throw new Error("Strict router mode enabled, but onchainos CLI does not support --router");
+  }
 
   loadState();
 
   // Sync holdings from on-chain wallet before starting
-  syncHoldingsFromChain();
+  await syncHoldingsFromChain();
 
   // Startup notification
   if (!noTelegram && hasTelegramConfig()) {
@@ -2944,14 +3527,14 @@ async function main() {
     if (!noTelegram && hasTelegramConfig()) {
       await sendTelegram("🛑 <b>LasbonBSCbot stopped</b>");
     }
-    saveState();
+    saveState(true);
     await mysqlPool.end().catch(() => {});
     process.exit(0);
   });
 
   process.on("SIGTERM", async () => {
     clearInterval(interval);
-    saveState();
+    saveState(true);
     await mysqlPool.end().catch(() => {});
     process.exit(0);
   });

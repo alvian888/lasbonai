@@ -1,3 +1,4 @@
+import "./initialize.js";
 import { config } from "./config.js";
 import { AgenticTradingBot } from "./bot.js";
 
@@ -37,6 +38,14 @@ async function main() {
     emaFast: getArgValue("--ema-fast") ? Number(getArgValue("--ema-fast")) : undefined,
     emaSlow: getArgValue("--ema-slow") ? Number(getArgValue("--ema-slow")) : undefined
   });
+
+  const preferredAmount = result.decision.preferredAmount ? ` preferredAmount=${result.decision.preferredAmount}` : "";
+  console.error(
+    `[cli] decision=${result.decision.action} conf=${result.decision.confidence.toFixed(2)} source=${result.decisionSource ?? "unknown"}${preferredAmount}`
+  );
+  if (result.decision.riskNotes?.length) {
+    console.error(`[cli] riskNotes=${result.decision.riskNotes.join("; ")}`);
+  }
 
   console.log(JSON.stringify(result, jsonReplacer, 2));
 }

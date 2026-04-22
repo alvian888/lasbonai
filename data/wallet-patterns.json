@@ -1,0 +1,15 @@
+{
+  "scannedAt": 1776846109410,
+  "windowBlocks": 2000,
+  "totalSwaps": 0,
+  "profitableWallets": 0,
+  "avgPnlPct": 0,
+  "avgHoldMinutes": 0,
+  "marketBias": "neutral",
+  "buyVolumeUsd": 0,
+  "sellVolumeUsd": 0,
+  "buyCount": 0,
+  "sellCount": 0,
+  "topWalletSummary": "none",
+  "contextSummary": "[OnChainIntel 2026-04-22T08:21Z] | Window: last 2000 blocks (~100min), 0 swaps decoded | Market bias: NEUTRAL | Buy vol $0 | Sell vol $0 | Buy ratio 50% | No wallets with >15% PnL found in this window — market ranging or insufficient data. | Tracked wallet 0x853bda7d.. HISTORICALLY_INACTIVE (0 ERC20 transfers in last 30M blocks / ~2.9yr BSC history). Ignore wallet-copy signal bias for this token."
+}

@@ -118,40 +118,50 @@ async function fetchCoinGeckoContract(address: string): Promise<CoinGeckoContrac
   );
 }
 
+const DEXSCREENER_CONCURRENCY = 4;
+
 async function fetchAllowlistDexCandidates(allowlist: Set<string>, limit: number): Promise<CandidateToken[]> {
-  const items: CandidateToken[] = [];
+  const addresses = Array.from(allowlist);
+  const items: (CandidateToken | null)[] = new Array(addresses.length).fill(null);
+  let nextIndex = 0;
 
-  for (const address of allowlist) {
-    try {
-      const payload = await fetchJsonWithTimeout<DexScreenerResponse>(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
-      const bscPairs = (payload?.pairs ?? []).filter((pair) => pair.chainId === "bsc");
-      if (bscPairs.length === 0) {
-        continue;
+  async function runWorker() {
+    while (true) {
+      const i = nextIndex++;
+      if (i >= addresses.length) return;
+      const address = addresses[i];
+      try {
+        const payload = await fetchJsonWithTimeout<DexScreenerResponse>(`https://api.dexscreener.com/latest/dex/tokens/${address}`);
+        const bscPairs = (payload?.pairs ?? []).filter((pair) => pair.chainId === "bsc");
+        if (bscPairs.length === 0) continue;
+
+        const best = bscPairs.sort((left, right) => asNumber(right.liquidity?.usd) - asNumber(left.liquidity?.usd))[0];
+        const marketCap = asNumber(best.marketCap);
+        const fdv = asNumber(best.fdv);
+        const resolvedMarketCap = marketCap > 0 ? marketCap : fdv;
+
+        items[i] = {
+          rank: 0,
+          symbol: String(best.baseToken?.symbol ?? ""),
+          address,
+          priceUsd: asNumber(best.priceUsd),
+          holders: 0,
+          liquidityUsd: asNumber(best.liquidity?.usd),
+          marketCapUsdOkx: resolvedMarketCap,
+          fdvUsdCoinGecko: null,
+          marketCapUsdCoinGecko: null,
+          symbolCoinGecko: null
+        };
+      } catch {
+        // skip token and continue
       }
-
-      const best = bscPairs.sort((left, right) => asNumber(right.liquidity?.usd) - asNumber(left.liquidity?.usd))[0];
-      const marketCap = asNumber(best.marketCap);
-      const fdv = asNumber(best.fdv);
-      const resolvedMarketCap = marketCap > 0 ? marketCap : fdv;
-
-      items.push({
-        rank: 0,
-        symbol: String(best.baseToken?.symbol ?? ""),
-        address,
-        priceUsd: asNumber(best.priceUsd),
-        holders: 0,
-        liquidityUsd: asNumber(best.liquidity?.usd),
-        marketCapUsdOkx: resolvedMarketCap,
-        fdvUsdCoinGecko: null,
-        marketCapUsdCoinGecko: null,
-        symbolCoinGecko: null
-      });
-    } catch {
-      // skip token and continue
     }
   }
 
-  return items
+  const workerCount = Math.min(DEXSCREENER_CONCURRENCY, addresses.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+  return (items.filter(Boolean) as CandidateToken[])
     .sort((left, right) => left.priceUsd - right.priceUsd)
     .slice(0, limit)
     .map((token, index) => ({
@@ -311,41 +321,41 @@ export async function scanBep20Candidates(): Promise<CandidateScanResult> {
 
   console.log(`[candidate-scan] enriching ${base.length} token(s) with CoinGecko (concurrency=${COINGECKO_CONCURRENCY})`);
 
-  const tokens: CandidateToken[] = [];
-  for (let start = 0; start < base.length; start += COINGECKO_CONCURRENCY) {
-    const chunk = base.slice(start, start + COINGECKO_CONCURRENCY);
+  // Worker pool: keep COINGECKO_CONCURRENCY workers busy at all times (no idle gaps between batches)
+  const enriched: (CandidateToken | null)[] = new Array(base.length).fill(null);
+  let nextCoinGeckoIndex = 0;
 
-    const enriched = await Promise.all(
-      chunk.map(async (token, localIndex) => {
-        const index = start + localIndex;
-        const address = String(token.tokenContractAddress ?? "").toLowerCase();
-        const coinGecko = address ? await fetchCoinGeckoContract(address) : null;
-        const fdvCoinGecko = coinGecko?.market_data?.fully_diluted_valuation?.usd ?? null;
-        const marketCapCoinGecko = coinGecko?.market_data?.market_cap?.usd ?? null;
+  async function runCoinGeckoWorker() {
+    while (true) {
+      const index = nextCoinGeckoIndex++;
+      if (index >= base.length) return;
+      const token = base[index];
+      const address = String(token.tokenContractAddress ?? "").toLowerCase();
+      const coinGecko = address ? await fetchCoinGeckoContract(address) : null;
+      const fdvCoinGecko = coinGecko?.market_data?.fully_diluted_valuation?.usd ?? null;
+      const marketCapCoinGecko = coinGecko?.market_data?.market_cap?.usd ?? null;
 
-        if (config.CANDIDATE_REQUIRE_EXPLICIT_FDV && (fdvCoinGecko === null || fdvCoinGecko < fdvMinUsd)) {
-          return null;
-        }
+      if (config.CANDIDATE_REQUIRE_EXPLICIT_FDV && (fdvCoinGecko === null || fdvCoinGecko < fdvMinUsd)) {
+        continue;
+      }
 
-        return {
-          rank: index + 1,
-          symbol: String(token.tokenSymbol ?? ""),
-          address,
-          priceUsd: asNumber(token.price),
-          holders: asNumber(token.holders),
-          liquidityUsd: asNumber(token.liquidity),
-          marketCapUsdOkx: asNumber(token.marketCap),
-          fdvUsdCoinGecko: fdvCoinGecko,
-          marketCapUsdCoinGecko: marketCapCoinGecko,
-          symbolCoinGecko: coinGecko?.symbol ?? null
-        } satisfies CandidateToken;
-      })
-    );
-
-    for (const item of enriched) {
-      if (item) tokens.push(item);
+      enriched[index] = {
+        rank: index + 1,
+        symbol: String(token.tokenSymbol ?? ""),
+        address,
+        priceUsd: asNumber(token.price),
+        holders: asNumber(token.holders),
+        liquidityUsd: asNumber(token.liquidity),
+        marketCapUsdOkx: asNumber(token.marketCap),
+        fdvUsdCoinGecko: fdvCoinGecko,
+        marketCapUsdCoinGecko: marketCapCoinGecko,
+        symbolCoinGecko: coinGecko?.symbol ?? null
+      } satisfies CandidateToken;
     }
   }
+
+  await Promise.all(Array.from({ length: Math.min(COINGECKO_CONCURRENCY, base.length) }, () => runCoinGeckoWorker()));
+  const tokens = (enriched.filter(Boolean) as CandidateToken[]).map((t, i) => ({ ...t, rank: i + 1 }));
 
   if (tokens.length === 0) {
     const historyFallback = await loadLastKnownNonEmpty(config.CANDIDATE_LIMIT);

@@ -1,16 +1,21 @@
+import "./initialize.js";
 import { config } from "./config.js";
 import { scrapeTelegramChannel } from "./telegram-scraper.js";
 import { analyzeSentiment, type SentimentResult } from "./sentiment-analyzer.js";
 import { resolveTokenAddress } from "./token-resolver.js";
 import { getPositionInfo } from "./position-tracker.js";
 import { sendTelegramMessage } from "./telegram.js";
-import type { AgenticTradingBot } from "./bot.js";
+import { AgenticTradingBot } from "./bot.js";
 import type { TradingRequest } from "./types.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 const ANALYSIS_PATH = path.resolve("data/telegram-sentiment-analysis.json");
 const COMPARISON_PATH = path.resolve("data/telegram-sentiment-comparison.json");
+const SENTIMENT_MAX_POSITION_USD = config.SENTIMENT_MAX_POSITION_USD;
+const SINGLE_SOURCE_PROBE_USD = 5;
+const MULTI_SOURCE_PROBE_USD = 10;
+const HIGH_CONFIDENCE_MULTI_SOURCE_PROBE_USD = 12;
 
 interface ChannelAnalysis {
   channel: string;
@@ -181,10 +186,37 @@ export async function runSentimentCycle(bot: AgenticTradingBot): Promise<void> {
         request.quoteTokenAddress
       );
 
-      const result = await bot.run(request, position);
-      console.log(
-        `[sentiment-trader] ${token.symbol} result: action=${result.decision.action} executed=${result.execution?.mode === "sent"}`
+      // Skip if already holding enough of this sentiment token
+      if (position.baseTokenValueUsd >= SENTIMENT_MAX_POSITION_USD) {
+        console.log(
+          `[sentiment-trader] Skipping ${token.symbol}: already holding $${position.baseTokenValueUsd.toFixed(2)} (>= $${SENTIMENT_MAX_POSITION_USD})`
+        );
+        continue;
+      }
+
+      request.buyAmount = pickSentimentBuyAmount(
+        config.DEFAULT_BUY_AMOUNT,
+        token,
+        position.baseTokenValueUsd
       );
+      request.sentimentProbe = true;
+
+      console.log(
+        `[sentiment-trader] ${token.symbol} probe size set to ${request.buyAmount} (sources=${token.sourceChannels.length}, confidence=${token.confidence.toFixed(2)})`
+      );
+
+      const result = await bot.run(request, position);
+      const riskSummary = result.decision.riskNotes?.length
+        ? ` riskNotes=[${result.decision.riskNotes.join(" | ")}]`
+        : "";
+      console.log(
+        `[sentiment-trader] ${token.symbol} result: action=${result.decision.action} executed=${result.execution?.mode === "sent"} confidence=${result.decision.confidence.toFixed(2)}${riskSummary}`
+      );
+      if (result.decision.action === "hold") {
+        console.log(
+          `[sentiment-trader] ${token.symbol} hold reasoning: ${result.decision.reasoning}`
+        );
+      }
       tradeCount++;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -203,6 +235,41 @@ interface MergedToken {
   confidence: number;
   contractAddress?: string;
   sourceChannels: string[];
+}
+
+function scaleAtomicAmount(amount: string, ratio: number): string | undefined {
+  if (!amount || !Number.isFinite(ratio) || ratio <= 0) {
+    return undefined;
+  }
+
+  try {
+    const rawAmount = BigInt(amount);
+    if (rawAmount <= 0n) {
+      return undefined;
+    }
+
+    const basisPoints = Math.max(1, Math.min(10_000, Math.floor(ratio * 10_000)));
+    const scaled = (rawAmount * BigInt(basisPoints)) / 10_000n;
+    return scaled > 0n ? scaled.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function pickSentimentBuyAmount(defaultBuyAmount: string, token: MergedToken, currentPositionUsd: number): string {
+  const remainingUsdHeadroom = Math.max(0, SENTIMENT_MAX_POSITION_USD - currentPositionUsd);
+  if (remainingUsdHeadroom <= 0) {
+    return defaultBuyAmount;
+  }
+
+  let targetProbeUsd = token.sourceChannels.length >= 2 ? MULTI_SOURCE_PROBE_USD : SINGLE_SOURCE_PROBE_USD;
+  if (token.confidence >= 0.8 && token.sourceChannels.length >= 2) {
+    targetProbeUsd = HIGH_CONFIDENCE_MULTI_SOURCE_PROBE_USD;
+  }
+
+  const ratio = Math.max(0.1, Math.min(1, Math.min(remainingUsdHeadroom, targetProbeUsd) / SENTIMENT_MAX_POSITION_USD));
+  const scaled = scaleAtomicAmount(defaultBuyAmount, ratio);
+  return scaled ?? defaultBuyAmount;
 }
 
 function buildComparison(channels: ChannelAnalysis[]): SentimentComparison {
@@ -326,7 +393,8 @@ function buildComparisonContext(comparison: SentimentComparison, tokenSymbol: st
     `Channels: ${channelBreakdown}.`,
     `Target token: ${tokenSymbol}.`,
     `Common bullish: ${comparison.commonBullishTokens.join(", ") || "none"}.`,
-    `Decision: ${comparison.tradeDecision}`,
+    `Decision: ${comparison.tradeDecision}.`,
+    `Execution bias: bullish continuation setup with probe-size entry, prioritize low slippage and scale only after confirmation.`,
   ].join(" ");
 }
 
@@ -450,23 +518,42 @@ async function notifySentimentComparison(
   await sendTelegramMessage(lines.join("\n"));
 }
 
-// ── CLI entry point (test mode — scrape + analyze only, no trades) ──
-if (process.argv[1]?.endsWith("sentiment-trader.ts") || process.argv[1]?.endsWith("sentiment-trader.js")) {
-  (async () => {
-    const channelUrl = config.SENTIMENT_CHANNEL_URL;
-    const limit = config.SENTIMENT_SCRAPE_LIMIT;
-    console.log(`[sentiment-test] Scraping ${channelUrl} (limit=${limit})...`);
-    const scrapeResult = await scrapeTelegramChannel(channelUrl, limit);
-    if (!scrapeResult || scrapeResult.messages.length === 0) {
-      console.log("[sentiment-test] No messages scraped.");
-      process.exit(0);
-    }
-    console.log(`[sentiment-test] Scraped ${scrapeResult.messages.length} messages`);
-    const analysis = await analyzeSentiment(scrapeResult.messages, scrapeResult.channel);
-    saveAnalysis(analysis, scrapeResult.channel);
-    console.log("[sentiment-test] Result:", JSON.stringify(analysis, null, 2));
-  })().catch((e) => {
+function hasArg(flag: string) {
+  return process.argv.includes(flag);
+}
+
+function isCliEntrypoint() {
+  return process.argv[1]?.endsWith("sentiment-trader.ts") || process.argv[1]?.endsWith("sentiment-trader.js");
+}
+
+async function runCli() {
+  if (hasArg("--execute")) {
+    console.log("[sentiment-execute] Running full multi-channel sentiment cycle with live bot stack...");
+    const bot = new AgenticTradingBot();
+    await runSentimentCycle(bot);
+    return;
+  }
+
+  const channelUrl = config.SENTIMENT_CHANNEL_URL;
+  const limit = config.SENTIMENT_SCRAPE_LIMIT;
+  console.log(`[sentiment-test] Scraping ${channelUrl} (limit=${limit})...`);
+  const scrapeResult = await scrapeTelegramChannel(channelUrl, limit);
+  if (!scrapeResult || scrapeResult.messages.length === 0) {
+    console.log("[sentiment-test] No messages scraped.");
+    return;
+  }
+  console.log(`[sentiment-test] Scraped ${scrapeResult.messages.length} messages`);
+  const analysis = await analyzeSentiment(scrapeResult.messages, scrapeResult.channel);
+  saveAnalysis(analysis, scrapeResult.channel);
+  console.log("[sentiment-test] Result:", JSON.stringify(analysis, null, 2));
+}
+
+// ── CLI entry point (default: scrape + analyze only, --execute: full cycle) ──
+if (isCliEntrypoint()) {
+  try {
+    await runCli();
+  } catch (e) {
     console.error(e instanceof Error ? e.message : e);
     process.exit(1);
-  });
+  }
 }

@@ -8,9 +8,20 @@ interface QuoteMetrics {
   tradeFeeUsd?: number;
   feeRatio?: number;
   priceImpactPercent?: number;
+  slippageEstPct?: number;
   buyBlocked: boolean;
   sellBlocked: boolean;
   taxRatePercent?: number;
+}
+
+// Token decimals override — for tokens where onchainos may report wrong/missing decimals.
+// Key: lowercase contract address. Value: actual on-chain decimals.
+const TOKEN_DECIMALS_OVERRIDE: Record<string, number> = {
+  "0xba2ae424d960c26247dd6c32edc70b295c744c43": 8  // DOGE-BSC (8 decimals, not 18)
+};
+
+function resolveDecimals(address: string, reported: number | undefined): number {
+  return TOKEN_DECIMALS_OVERRIDE[address.toLowerCase()] ?? reported ?? 18;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -48,12 +59,31 @@ function humanAmount(amount: string, decimals?: number) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function scaleAtomicAmount(amount: string, ratio: number) {
+  if (!amount || ratio <= 0) {
+    return undefined;
+  }
+
+  try {
+    const rawAmount = BigInt(amount);
+    if (rawAmount <= 0n) {
+      return undefined;
+    }
+
+    const basisPoints = Math.max(1, Math.min(10_000, Math.floor(ratio * 10_000)));
+    const scaled = (rawAmount * BigInt(basisPoints)) / 10_000n;
+    return scaled > 0n ? scaled.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function getQuoteMetrics(quote: QuoteSummary): QuoteMetrics {
   const raw = asRecord(quote.raw);
   const fromToken = asRecord(raw?.fromToken);
   const toToken = asRecord(raw?.toToken);
-  const amountIn = humanAmount(quote.amountIn, asNumber(fromToken?.decimal));
-  const amountOut = humanAmount(quote.amountOut, asNumber(toToken?.decimal));
+  const amountIn = humanAmount(quote.amountIn, resolveDecimals(quote.fromTokenAddress, asNumber(fromToken?.decimal)));
+  const amountOut = humanAmount(quote.amountOut, resolveDecimals(quote.toTokenAddress, asNumber(toToken?.decimal)));
   const fromPrice = asNumber(fromToken?.tokenUnitPrice);
   const toPrice = asNumber(toToken?.tokenUnitPrice);
   const amountInUsd = amountIn !== undefined && fromPrice !== undefined ? amountIn * fromPrice : undefined;
@@ -68,12 +98,19 @@ function getQuoteMetrics(quote: QuoteSummary): QuoteMetrics {
   const toTax = asNumber(toToken?.taxRate);
   const taxRatePercent = Math.max(fromTax ?? 0, toTax ?? 0);
 
+  // Estimate effective slippage: difference between expected and actual output value
+  const slippageEstPct =
+    amountInUsd && amountOutUsd && amountInUsd > 0
+      ? Math.max(0, ((amountInUsd - amountOutUsd) / amountInUsd) * 100 - (tradeFeeUsd ?? 0) / amountInUsd * 100)
+      : undefined;
+
   return {
     amountInUsd,
     amountOutUsd,
     tradeFeeUsd,
     feeRatio,
     priceImpactPercent,
+    slippageEstPct,
     buyBlocked: toHoneyPot || taxRatePercent > 10,
     sellBlocked: fromHoneyPot,
     taxRatePercent
@@ -116,26 +153,51 @@ function inferSignalFromTa(request: TradingRequest) {
     }
   }
 
-  if (taSignals.length === 0) {
+  // If TA metrics are provided, use them
+  if (taSignals.length > 0) {
+    const score = taSignals.reduce((sum, value) => sum + value, 0);
+
+    if (score > 0) {
+      return { action: "buy" as const, reason: reasons.join("; ") };
+    }
+
+    if (score < 0) {
+      return { action: "sell" as const, reason: reasons.join("; ") };
+    }
+
     return {
       action: "hold" as const,
-      reason: "No TA metrics supplied (RSI/MACD/EMA), so no directional edge."
+      reason: `TA signals are mixed. ${reasons.join("; ")}`
     };
   }
 
-  const score = taSignals.reduce((sum, value) => sum + value, 0);
+  // No TA metrics: use market context as fallback
+  const context = (request.marketContext ?? "").toLowerCase();
+  const bullishKeywords = ["bullish", "breakout", "accumulation", "uptrend", "rally", "surge", "momentum", "buy"];
+  const bearishKeywords = ["bearish", "breakdown", "distribution", "downtrend", "dump", "collapse", "decline", "sell"];
+  
+  const hasBullish = bullishKeywords.some(kw => context.includes(kw));
+  const hasBearish = bearishKeywords.some(kw => context.includes(kw));
 
-  if (score > 0) {
-    return { action: "buy" as const, reason: reasons.join("; ") };
+  if (hasBullish && !hasBearish) {
+    const contextStr = request.marketContext ?? "bullish context detected";
+    return {
+      action: "buy" as const,
+      reason: `Market context suggests bullish setup: ${contextStr}`
+    };
   }
 
-  if (score < 0) {
-    return { action: "sell" as const, reason: reasons.join("; ") };
+  if (hasBearish && !hasBullish) {
+    const contextStr = request.marketContext ?? "bearish context detected";
+    return {
+      action: "sell" as const,
+      reason: `Market context suggests bearish setup: ${contextStr}`
+    };
   }
 
   return {
     action: "hold" as const,
-    reason: `TA signals are mixed. ${reasons.join("; ")}`
+    reason: "No TA metrics supplied (RSI/MACD/EMA) and no clear market context signal."
   };
 }
 
@@ -149,61 +211,154 @@ export function evaluateBaselineStrategy(params: {
   const sellMetrics = getQuoteMetrics(params.sellQuote);
   const signal = inferSignalFromTa(params.request);
   const riskNotes: string[] = [];
+  let hasBlockingRisk = false;
+  let adaptivePreferredAmount: string | undefined;
   const pos = params.position;
 
   if (buyMetrics.buyBlocked) {
     riskNotes.push("Buy path is blocked by honeypot or excessive token tax.");
+    hasBlockingRisk = true;
   }
 
   if (sellMetrics.sellBlocked) {
     riskNotes.push("Sell path is blocked by honeypot characteristics.");
+    hasBlockingRisk = true;
   }
 
-  if ((buyMetrics.priceImpactPercent ?? 0) > 2.5 || (sellMetrics.priceImpactPercent ?? 0) > 2.5) {
-    riskNotes.push("Price impact is above the baseline risk threshold of 2.5%.");
+  // Sentiment probes use a relaxed impact threshold — small-cap tokens on BSC DEX
+  // regularly exceed 0.5% impact at probe sizes ($5–$12) due to thin liquidity.
+  const maxPriceImpactPct = params.request.sentimentProbe
+    ? 3.0
+    : config.BASELINE_MAX_PRICE_IMPACT_PCT;
+
+  // Sentiment probes tolerate higher fee ratios — bridged BEP20 tokens (e.g. LINK)
+  // can show 2–3% effective sell fee from DEX routing overhead, not actual token tax.
+  // Sentiment probes accept up to 5% fee (OKX DEX routing overhead on bridged BEP20 tokens
+  // like LINK can report 2–4% tradeFee due to thin-pool routing; not a token tax).
+  const maxFeeRatioPct = params.request.sentimentProbe ? 0.05 : 0.02;
+  if ((buyMetrics.feeRatio ?? 0) > maxFeeRatioPct || (sellMetrics.feeRatio ?? 0) > maxFeeRatioPct) {
+    riskNotes.push(`Swap fee ratio too large: buy=${((buyMetrics.feeRatio ?? 0) * 100).toFixed(2)}% sell=${((sellMetrics.feeRatio ?? 0) * 100).toFixed(2)}% (max ${(maxFeeRatioPct * 100).toFixed(0)}%). Wait for lower-fee conditions.`);
+    hasBlockingRisk = true;
   }
 
-  if ((buyMetrics.feeRatio ?? 0) > 0.05 || (sellMetrics.feeRatio ?? 0) > 0.05) {
-    riskNotes.push("Estimated swap fee is too large relative to the notional size.");
+  const minNotionalUsd = params.request.sentimentProbe
+    ? Math.min(config.BASELINE_MIN_NOTIONAL_USD, 2.5)
+    : config.BASELINE_MIN_NOTIONAL_USD;
+
+  // Slippage quality gate: block trades with excessive estimated slippage
+  // RULE: Semakin kecil slippage = semakin menguntungkan → tighten gate to 0.5% max
+  const buySlippage = buyMetrics.slippageEstPct ?? 0;
+  const sellSlippage = sellMetrics.slippageEstPct ?? 0;
+  const rawImpact = signal.action === "sell"
+    ? sellMetrics.priceImpactPercent
+    : buyMetrics.priceImpactPercent;
+  // Guard: some tokens return empty priceImpactPercent (e.g. IQ); warn and rely on slippage check.
+  if (signal.action !== "hold" && rawImpact === undefined) {
+    riskNotes.push(`Price impact data unavailable for ${signal.action} quote; relying on slippage backstop.`);
+  }
+  const relevantImpactForSignal = rawImpact ?? 0;
+  if (signal.action !== "hold" && relevantImpactForSignal > maxPriceImpactPct) {
+    if (signal.action === "buy") {
+      const targetImpact = maxPriceImpactPct * 0.7;
+      const scaleRatio = Math.max(0.2, Math.min(0.9, targetImpact / relevantImpactForSignal));
+      adaptivePreferredAmount = scaleAtomicAmount(params.request.buyAmount, scaleRatio);
+      if (adaptivePreferredAmount && adaptivePreferredAmount !== params.request.buyAmount) {
+        riskNotes.push(`Adaptive sizing on high impact: reduce buy size to ${(scaleRatio * 100).toFixed(0)}% to target <= ${targetImpact.toFixed(3)}% impact.`);
+      } else {
+        riskNotes.push(`Price impact too high for ${signal.action}: ${relevantImpactForSignal.toFixed(3)}% (max ${maxPriceImpactPct.toFixed(3)}%). Reduce size for better fill.`);
+        hasBlockingRisk = true;
+      }
+    } else {
+      riskNotes.push(`Price impact too high for ${signal.action}: ${relevantImpactForSignal.toFixed(3)}% (max ${maxPriceImpactPct.toFixed(3)}%). Reduce size for better fill.`);
+      hasBlockingRisk = true;
+    }
+  }
+
+  // Relax slippage gate: 0.5% is too strict for volatile assets. Use 1.0% as hard limit, warn at 0.5%
+  const relevantSlippageForSignal = signal.action === "sell" ? sellSlippage : buySlippage;
+  if (signal.action !== "hold" && relevantSlippageForSignal > 1.4) {
+    riskNotes.push(`Slippage very high for ${signal.action}: ${relevantSlippageForSignal.toFixed(2)}% (max 1.4%). Try smaller size.`);
+    hasBlockingRisk = true;
+  } else if (signal.action !== "hold" && relevantSlippageForSignal > 0.8) {
+    riskNotes.push(`⚠️ Slippage moderate for ${signal.action}: ${relevantSlippageForSignal.toFixed(2)}%. Acceptable with good position sizing.`);
   }
 
   // Direction-aware notional check: only flag the side relevant to the signal
-  if (signal.action === "buy" && (buyMetrics.amountInUsd ?? 0) < config.BASELINE_MIN_NOTIONAL_USD) {
+  if (signal.action === "buy" && (buyMetrics.amountInUsd ?? 0) < minNotionalUsd) {
     riskNotes.push(
-      `Buy notional ($${(buyMetrics.amountInUsd ?? 0).toFixed(2)}) is below baseline minimum of $${config.BASELINE_MIN_NOTIONAL_USD.toFixed(2)}.`
+      `Buy notional ($${(buyMetrics.amountInUsd ?? 0).toFixed(2)}) is below baseline minimum of $${minNotionalUsd.toFixed(2)}.`
     );
+    hasBlockingRisk = true;
   }
-  if (signal.action === "sell" && (sellMetrics.amountInUsd ?? 0) < config.BASELINE_MIN_NOTIONAL_USD) {
+  if (signal.action === "sell" && (sellMetrics.amountInUsd ?? 0) < minNotionalUsd) {
     riskNotes.push(
-      `Sell notional ($${(sellMetrics.amountInUsd ?? 0).toFixed(2)}) is below baseline minimum of $${config.BASELINE_MIN_NOTIONAL_USD.toFixed(2)}.`
+      `Sell notional ($${(sellMetrics.amountInUsd ?? 0).toFixed(2)}) is below baseline minimum of $${minNotionalUsd.toFixed(2)}.`
     );
+    hasBlockingRisk = true;
   }
 
-  if (riskNotes.length > 0) {
-    return {
-      action: "hold",
-      confidence: 0.9,
-      reasoning: `Baseline strategy blocked execution. ${signal.reason}`,
-      riskNotes
-    };
-  }
-
-  /* ─── Position-aware overrides ─── */
+  /* ─── TP/SL: MUST fire before any risk gate ─── */
+  // These are risk management exits and must always execute regardless of quote quality.
+  // Moving them BEFORE hasBlockingRisk ensures the bot never gets stuck in a position
+  // because of temporary high price impact or low quote quality.
   if (pos) {
-    const cooldownMs = config.COOLDOWN_SAME_DIRECTION_MIN * 60_000;
-    const timeSinceLastTrade = Date.now() - (pos.lastTradeTimestamp || 0);
+    // Multi-tier take profit for higher weekly P&L
+    if (pos.costBasisUsd > 0 && pos.baseTokenValueUsd > 5) {
+      // Tier 3: Full take profit at configured TP% (sell 75%)
+      if (pos.unrealizedPnlPct >= config.TAKE_PROFIT_PCT) {
+        return {
+          action: "sell",
+          confidence: 0.82,
+          reasoning: `TP-3 triggered: +${pos.unrealizedPnlPct.toFixed(1)}% >= ${config.TAKE_PROFIT_PCT}%. Selling 75%. Position $${pos.baseTokenValueUsd.toFixed(2)}.`,
+          riskNotes: []
+        };
+      }
+      // Tier 2: Partial profit at 60% of TP target (sell normal portion)
+      if (pos.unrealizedPnlPct >= config.TAKE_PROFIT_PCT * 0.6) {
+        return {
+          action: "sell",
+          confidence: 0.72,
+          reasoning: `TP-2 triggered: +${pos.unrealizedPnlPct.toFixed(1)}% >= ${(config.TAKE_PROFIT_PCT * 0.6).toFixed(1)}%. Locking partial profit.`,
+          riskNotes: []
+        };
+      }
+      // Tier 1: Early profit lock at 40% of TP target with low confidence
+      if (pos.unrealizedPnlPct >= config.TAKE_PROFIT_PCT * 0.4) {
+        return {
+          action: "sell",
+          confidence: 0.62,
+          reasoning: `TP-1 triggered: +${pos.unrealizedPnlPct.toFixed(1)}% >= ${(config.TAKE_PROFIT_PCT * 0.4).toFixed(1)}%. Early profit lock.`,
+          riskNotes: []
+        };
+      }
+    }
 
-    // Take profit: if unrealized P&L >= target, sell (BEFORE cooldown – TP must always fire)
-    if (pos.costBasisUsd > 0 && pos.unrealizedPnlPct >= config.TAKE_PROFIT_PCT && pos.baseTokenValueUsd > 5) {
+    // Trailing stop: if price dropped >4% from peak P&L while still in profit
+    const TRAILING_STOP_DROP_PCT = 4;
+    if (pos.peakPnlPct > 3 && pos.unrealizedPnlPct > 0 && pos.baseTokenValueUsd > 5) {
+      const dropFromPeak = pos.peakPnlPct - pos.unrealizedPnlPct;
+      if (dropFromPeak >= TRAILING_STOP_DROP_PCT) {
+        return {
+          action: "sell",
+          confidence: 0.76,
+          reasoning: `Trailing stop triggered: peak was +${pos.peakPnlPct.toFixed(1)}%, now +${pos.unrealizedPnlPct.toFixed(1)}% (dropped ${dropFromPeak.toFixed(1)}% from peak, threshold ${TRAILING_STOP_DROP_PCT}%).`,
+          riskNotes: []
+        };
+      }
+    }
+
+    // Dust position abandonment: if position lost >90% AND value < $5, stop trying to sell
+    // This prevents infinite stop-loss loops on worthless positions
+    if (pos.costBasisUsd > 0 && pos.unrealizedPnlPct <= -90 && pos.baseTokenValueUsd < 5) {
       return {
-        action: "sell",
-        confidence: 0.75,
-        reasoning: `Take profit triggered: unrealized P&L +${pos.unrealizedPnlPct.toFixed(1)}% (target ${config.TAKE_PROFIT_PCT}%). Position $${pos.baseTokenValueUsd.toFixed(2)}.`,
-        riskNotes: []
+        action: "hold",
+        confidence: 0.95,
+        reasoning: `Dust position abandoned: lost ${Math.abs(pos.unrealizedPnlPct).toFixed(1)}% and value is only $${pos.baseTokenValueUsd.toFixed(2)}. Not worth gas to sell. Focus on new entries.`,
+        riskNotes: [`Position value $${pos.baseTokenValueUsd.toFixed(2)} below $5 dust threshold. Sell gas would exceed recovery.`]
       };
     }
 
-    // Stop loss: if position is underwater, cut losses (BEFORE cooldown – SL must always fire)
+    // Stop loss: if position is underwater, cut losses (always fires before cooldown or risk gate)
     if (pos.costBasisUsd > 0 && pos.unrealizedPnlPct <= -config.STOP_LOSS_PCT && pos.baseTokenValueUsd > 5) {
       return {
         action: "sell",
@@ -212,6 +367,21 @@ export function evaluateBaselineStrategy(params: {
         riskNotes: []
       };
     }
+  }
+
+  if (hasBlockingRisk) {
+    return {
+      action: "hold",
+      confidence: 0.78,
+      reasoning: `Baseline strategy blocked execution. ${signal.reason}`,
+      riskNotes
+    };
+  }
+
+  /* ─── Position-aware overrides (non-critical: cooldown, position size) ─── */
+  if (pos) {
+    const cooldownMs = config.COOLDOWN_SAME_DIRECTION_MIN * 60_000;
+    const timeSinceLastTrade = Date.now() - (pos.lastTradeTimestamp || 0);
 
     // Cooldown: don't trade too frequently in the same direction
     if (pos.lastTradeAction && timeSinceLastTrade < cooldownMs && pos.lastTradeAction === signal.action) {
@@ -228,7 +398,7 @@ export function evaluateBaselineStrategy(params: {
       return {
         action: "hold",
         confidence: 0.7,
-        reasoning: `Max position reached: holding $${pos.baseTokenValueUsd.toFixed(2)} XPL (limit $${config.MAX_POSITION_USD}). No more buys.`,
+        reasoning: `Max position reached: holding $${pos.baseTokenValueUsd.toFixed(2)} (limit $${config.MAX_POSITION_USD}). No more buys.`,
         riskNotes: []
       };
     }
@@ -253,10 +423,45 @@ export function evaluateBaselineStrategy(params: {
     };
   }
 
+  // Dynamic confidence boost: lower slippage → higher confidence → more likely to execute
+  // Semakin kecil slippage = semakin menguntungkan = semakin tinggi confidence
+  const relevantSlippage = signal.action === "buy" ? buySlippage : sellSlippage;
+  // Use maxPriceImpactPct as conservative fallback when impact is unknown (empty/missing from quote)
+  const relevantImpact = rawImpact ?? maxPriceImpactPct;
+  let preferredAmount: string | undefined = adaptivePreferredAmount;
+  let dynamicConfidence = 0.62;
+  if (relevantSlippage < 0.05 && relevantImpact < 0.02) {
+    dynamicConfidence = 0.85; // Near-zero slippage → highest confidence → max P&L potential
+  } else if (relevantSlippage < 0.1 && relevantImpact < 0.05) {
+    dynamicConfidence = 0.80; // Excellent liquidity, very low cost
+  } else if (relevantSlippage < 0.2 && relevantImpact < 0.1) {
+    dynamicConfidence = 0.76; // Good liquidity
+  } else if (relevantSlippage < 0.4 && relevantImpact < 0.15) {
+    dynamicConfidence = 0.72; // Acceptable liquidity
+  } else if (relevantSlippage < 0.6 && relevantImpact < 0.2) {
+    dynamicConfidence = 0.68; // Marginal but tradeable
+  }
+
+  // Additional boost for consistently low slippage across both sides
+  if (buySlippage < 0.15 && sellSlippage < 0.15) {
+    dynamicConfidence = Math.min(dynamicConfidence + 0.03, 0.88);
+  }
+
+  if (!preferredAmount && signal.action === "buy" && relevantImpact > 0 && relevantImpact > maxPriceImpactPct * 0.75) {
+    const targetImpact = maxPriceImpactPct * 0.7;
+    const scaleRatio = Math.max(0.25, Math.min(0.9, targetImpact / relevantImpact));
+    preferredAmount = scaleAtomicAmount(params.request.buyAmount, scaleRatio);
+    if (preferredAmount && preferredAmount !== params.request.buyAmount) {
+      riskNotes.push(`Adaptive sizing: reduce buy size to ${(scaleRatio * 100).toFixed(0)}% to target <= ${targetImpact.toFixed(3)}% impact.`);
+      dynamicConfidence = Math.min(dynamicConfidence + 0.02, 0.9);
+    }
+  }
+
   return {
     action: signal.action,
-    confidence: 0.66,
-    reasoning: `Baseline strategy found an acceptable setup. ${signal.reason}`,
-    riskNotes
+    confidence: dynamicConfidence,
+    reasoning: `Baseline strategy: slippage=${relevantSlippage.toFixed(3)}%, impact=${relevantImpact.toFixed(3)}% → conf=${dynamicConfidence.toFixed(2)}. Lower slippage = higher P&L. ${signal.reason}`,
+    riskNotes,
+    preferredAmount
   };
 }

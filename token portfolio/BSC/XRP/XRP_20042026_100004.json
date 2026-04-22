@@ -1,0 +1,52 @@
+{
+  "symbol": "XRP",
+  "name": "XRP",
+  "chain": "BSC",
+  "chainId": 56,
+  "address": "0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE",
+  "decimals": 18,
+  "category": "swing",
+  "timestamp": "2026-04-20T03:00:04.866Z",
+  "timestampUnix": 1776653998242,
+  "price": {
+    "usd": 1.4096161570816168,
+    "idr": 23681.55143897116
+  },
+  "change": {
+    "1h": 0.12,
+    "4h": 0.98,
+    "24h": -1.4
+  },
+  "range24h": {
+    "high": 1.4560452518103602,
+    "low": 1.381361424502589
+  },
+  "market": {
+    "volume24h_usd": 1103130.9136516736,
+    "volume24h_idr": 18532599349.348118,
+    "liquidity_usd": 5508207.974175897,
+    "liquidity_idr": 92537893966.15508,
+    "txs24h": 7167
+  },
+  "portfolio": {
+    "holdings": 1.4302903e-9,
+    "entryPrice": 1.455,
+    "entryCost_usd": 5.16,
+    "entryCost_idr": 86688,
+    "currentValue_usd": 2.0161603161971128e-9,
+    "currentValue_idr": 0.00003387149331211149,
+    "pnl_usd": -5.15999999798384,
+    "pnl_idr": -86687.99996612851,
+    "pnl_pct": -3.12
+  },
+  "zones": {
+    "buyZone": 1.382,
+    "sellTarget1": 1.673,
+    "sellTarget2": 1.819,
+    "sellTarget3": 2.037,
+    "stopLoss": 1.339,
+    "trailingStop": 1.4459261869178972,
+    "trailingStopPct": 6
+  },
+  "signal": "TRAILING_STOP"
+}
